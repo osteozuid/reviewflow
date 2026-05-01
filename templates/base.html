@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReviewFlow</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="logo">
+    <span class="logo-mark">◈</span>
+    <span class="logo-name">ReviewFlow</span>
+  </div>
+  <ul class="nav">
+    <li class="{{ 'active' if page == 'dashboard' }}">
+      <a href="{{ url_for('dashboard') }}">
+        <span class="ico">⬡</span> Dashboard
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'upload' }}">
+      <a href="{{ url_for('upload') }}">
+        <span class="ico">↑</span> Upload
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'run' }}">
+      <a href="{{ url_for('run_page') }}">
+        <span class="ico">▶</span> Uitvoeren
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'schedule' }}">
+      <a href="{{ url_for('schedule') }}">
+        <span class="ico">◷</span> Schema
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'logs' }}">
+      <a href="{{ url_for('logs') }}">
+        <span class="ico">≡</span> Logs
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'settings' }}">
+      <a href="{{ url_for('settings') }}">
+        <span class="ico">⚙</span> Instellingen
+      </a>
+    </li>
+  </ul>
+  <div class="sidebar-foot">v1.0</div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <span class="breadcrumb">{% block breadcrumb %}{% endblock %}</span>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="toast toast-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+  </div>
+  <div class="content">
+    {% block content %}{% endblock %}
+  </div>
+</div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

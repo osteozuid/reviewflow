@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}Uitvoeren{% endblock %}
+{% block content %}
+
+<div class="ptitle">Uitvoeren</div>
+
+<div class="run-grid">
+  <form method="post" action="{{ url_for('run_start') }}" class="run-form">
+    <input type="hidden" name="modus" value="dry">
+    <button type="submit" class="run-card">
+      <div class="rc-icon" style="color:#858585;">◉</div>
+      <div class="rc-title">Dry Run</div>
+      <div class="rc-desc">Analyseer wie een mail zou krijgen.<br>Geen mails worden verstuurd.</div>
+    </button>
+  </form>
+
+  <form method="post" action="{{ url_for('run_start') }}" class="run-form">
+    <input type="hidden" name="modus" value="test">
+    <input type="hidden" name="test_email" value="{{ admin }}">
+    <button type="submit" class="run-card">
+      <div class="rc-icon" style="color:#ce9178;">◎</div>
+      <div class="rc-title">Test versturen</div>
+      <div class="rc-desc">Stuurt alle mails naar:<br><span class="mono">{{ admin }}</span></div>
+    </button>
+  </form>
+
+  <form method="post" action="{{ url_for('run_start') }}" class="run-form"
+        onsubmit="return confirm('Echte mails versturen naar patiënten?')">
+    <input type="hidden" name="modus" value="send">
+    <button type="submit" class="run-card">
+      <div class="rc-icon" style="color:#4ec9b0;">▶</div>
+      <div class="rc-title">Versturen</div>
+      <div class="rc-desc">Verstuurt echte mails naar patiënten.<br>Database wordt bijgewerkt.</div>
+    </button>
+  </form>
+</div>
+
+<div class="section">
+  <div class="sec-head">
+    <span id="log-title">Log</span>
+    <span id="log-badge" class="badge b-dim">wacht</span>
+  </div>
+  <div class="log-panel" id="log-panel">
+    <span class="ldim">Kies een modus hierboven om te starten...</span>
+  </div>
+  <div class="sum-grid" id="summary" style="display:none; padding:12px;">
+    <div class="sum-box">
+      <div class="sum-num" id="s-kand">—</div>
+      <div class="sum-lbl">Kandidaten</div>
+    </div>
+    <div class="sum-box">
+      <div class="sum-num text-ok" id="s-verz">—</div>
+      <div class="sum-lbl">Verzonden</div>
+    </div>
+    <div class="sum-box">
+      <div class="sum-num text-dim" id="s-over">—</div>
+      <div class="sum-lbl">Overgeslagen</div>
+    </div>
+    <div class="sum-box">
+      <div class="sum-num text-err" id="s-fail">—</div>
+      <div class="sum-lbl">Gefaald</div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+let poll = null;
+
+function startPoll() {
+  if (poll) return;
+  poll = setInterval(fetchStatus, 2000);
+  fetchStatus();
+}
+
+function fetchStatus() {
+  fetch('/api/run/status')
+    .then(r => r.json())
+    .then(d => {
+      const panel = document.getElementById('log-panel');
+      const badge = document.getElementById('log-badge');
+
+      if (d.lines && d.lines.length) {
+        panel.innerHTML = d.lines.map(l => {
+          let cls = '';
+          if (l.includes('✓')) cls = 'lok';
+          else if (l.includes('✗') || l.includes('FOUT')) cls = 'lerr';
+          else if (l.includes('[DRY]') || l.includes('─')) cls = 'ldim';
+          return `<span class="${cls}">${escHtml(l)}</span>`;
+        }).join('\n');
+        panel.scrollTop = panel.scrollHeight;
+      }
+
+      if (d.active) {
+        badge.textContent = 'bezig...';
+        badge.className = 'badge b-warn';
+      }
+
+      if (d.done) {
+        badge.textContent = 'klaar';
+        badge.className = 'badge b-green';
+        clearInterval(poll); poll = null;
+        if (d.counts && d.counts.kandidaten !== undefined) {
+          document.getElementById('s-kand').textContent = d.counts.kandidaten;
+          document.getElementById('s-verz').textContent = d.counts.verzonden || 0;
+          document.getElementById('s-over').textContent = d.counts.overgeslagen;
+          document.getElementById('s-fail').textContent = d.counts.gefaald || 0;
+          document.getElementById('summary').style.display = 'grid';
+        }
+      }
+    });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Auto-start if a run is already active
+fetch('/api/run/status').then(r => r.json()).then(d => {
+  if (d.active || (d.done && d.lines && d.lines.length)) startPoll();
+});
+
+// Start polling after form submit
+document.querySelectorAll('.run-form').forEach(f => {
+  f.addEventListener('submit', () => setTimeout(startPoll, 600));
+});
+</script>
+{% endblock %}

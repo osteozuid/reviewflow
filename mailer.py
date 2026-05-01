@@ -1,0 +1,89 @@
+import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def get_smtp_config():
+    config = {
+        'host':               os.getenv('SMTP_HOST', 'smtp.gmail.com'),
+        'port':               int(os.getenv('SMTP_PORT', '587')),
+        'user':               os.getenv('SMTP_USER', ''),
+        'password':           os.getenv('SMTP_PASSWORD', ''),
+        'from_email':         os.getenv('FROM_EMAIL', ''),
+        'from_name':          os.getenv('FROM_NAME', 'Osteozuid'),
+        'admin_email':        os.getenv('ADMIN_EMAIL', ''),
+        'google_review_link': os.getenv('GOOGLE_REVIEW_LINK', ''),
+    }
+    missing = [k for k in ('user', 'password', 'from_email') if not config[k]]
+    if missing:
+        raise ValueError(f"Ontbrekende .env variabelen: {', '.join(missing).upper()}")
+    return config
+
+
+def build_body_plain(voornaam, google_review_link):
+    return (
+        f"Dag {voornaam},\n\n"
+        "Bedankt voor uw bezoek aan Osteozuid.\n\n"
+        "We proberen elke patiënt zo goed mogelijk te begeleiden. "
+        "Als u enkele minuten tijd heeft, zouden we het enorm waarderen als u uw ervaring "
+        "wilt delen via Google — dat helpt andere mensen om een praktijk te vinden die bij hen past.\n\n"
+        f"Deel uw ervaring via Google:\n{google_review_link}\n\n"
+        "Wilt u liever rechtstreeks iets aan ons doorgeven? "
+        "Antwoord dan gerust op deze mail.\n\n"
+        "Vriendelijke groeten,\n"
+        "Osteozuid Groepspraktijk"
+    )
+
+
+def build_body_html(voornaam, google_review_link):
+    return f"""<!DOCTYPE html>
+<html lang="nl">
+<head><meta charset="UTF-8"></head>
+<body style="margin: 0; padding: 0; background-color: #ffffff;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff;">
+    <tr>
+      <td style="padding: 24px 0 0 0; font-family: Calibri, Candara, 'Segoe UI', Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #1a1a1a; text-align: left;">
+        <p style="margin: 0 0 16px 0;">Dag {voornaam},</p>
+        <p style="margin: 0 0 16px 0;">Bedankt voor uw bezoek aan Osteozuid.</p>
+        <p style="margin: 0 0 16px 0;">We proberen elke patiënt zo goed mogelijk te begeleiden. Als u enkele minuten tijd heeft, zouden we het enorm waarderen als u uw ervaring wilt delen via Google — dat helpt andere mensen om een praktijk te vinden die bij hen past.</p>
+        <p style="margin: 0 0 16px 0;"><a href="{google_review_link}" style="color: #1a73e8; text-decoration: underline; font-weight: bold;">Deel uw ervaring via Google</a></p>
+        <p style="margin: 0 0 16px 0;">Wilt u liever rechtstreeks iets aan ons doorgeven? Antwoord dan gerust op deze mail.</p>
+        <p style="margin: 0;">Vriendelijke groeten,<br>Osteozuid Groepspraktijk</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+def _send(to_email, voornaam, google_review_link, smtp_config):
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = "Uw ervaring bij Osteozuid"
+    msg['From']    = formataddr((smtp_config['from_name'], smtp_config['from_email']))
+    msg['To']      = to_email
+    msg.attach(MIMEText(build_body_plain(voornaam, google_review_link), 'plain', 'utf-8'))
+    msg.attach(MIMEText(build_body_html(voornaam, google_review_link), 'html', 'utf-8'))
+    with smtplib.SMTP(smtp_config['host'], smtp_config['port']) as server:
+        server.ehlo()
+        server.starttls()
+        server.login(smtp_config['user'], smtp_config['password'])
+        server.sendmail(smtp_config['from_email'], to_email, msg.as_bytes())
+
+
+def send_test_email(to_email, smtp_config):
+    review_link = smtp_config['google_review_link'] or 'https://maps.google.com/'
+    _send(to_email, 'Test', review_link, smtp_config)
+
+
+def send_review_request(patient, smtp_config):
+    voornaam = patient.get('voornaam') or patient['naam'].split()[-1]
+    review_link = smtp_config['google_review_link']
+    if not review_link:
+        raise ValueError("GOOGLE_REVIEW_LINK is niet ingesteld in .env")
+    _send(patient['email'], voornaam, review_link, smtp_config)

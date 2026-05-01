@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}Upload{% endblock %}
+{% block content %}
+
+<div class="ptitle">Bestanden uploaden</div>
+
+<form method="post" enctype="multipart/form-data" id="upform">
+  <div class="dropzone" id="dz" onclick="document.getElementById('fi').click()">
+    <div class="dz-icon">↑</div>
+    <div class="dz-text">Sleep bestanden hier of klik om te kiezen</div>
+    <div class="dz-hint">CSV of Excel export van MyOrganizer / andere agenda</div>
+  </div>
+  <input type="file" id="fi" name="files" multiple accept=".csv,.xlsx,.xls"
+         style="display:none" onchange="this.form.submit()">
+</form>
+
+<div class="section">
+  <div class="sec-head">
+    <span>Bestanden in input/</span>
+    <span class="text-dim" style="font-size:11px">{{ files|length }} bestand(en)</span>
+  </div>
+  {% if files %}
+  <table>
+    <thead>
+      <tr><th>Naam</th><th>Grootte</th><th>Gewijzigd</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for f in files %}
+      <tr>
+        <td class="mono">{{ f.name }}</td>
+        <td class="text-dim">{{ f.size }}</td>
+        <td class="text-dim">{{ f.modified }}</td>
+        <td style="text-align:right; padding-right:12px;">
+          <a href="{{ url_for('delete_file', filename=f.name) }}"
+             class="btn btn-danger btn-sm"
+             onclick="return confirm('{{ f.name }} verwijderen?')">✕</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Geen bestanden. Upload een CSV of Excel export van je agenda.</div>
+  {% endif %}
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const dz = document.getElementById('dz');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('over');
+  document.getElementById('fi').files = e.dataTransfer.files;
+  document.getElementById('upform').submit();
+});
+</script>
+{% endblock %}

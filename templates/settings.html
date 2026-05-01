@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}Instellingen{% endblock %}
+{% block content %}
+
+<div class="ptitle">Instellingen</div>
+
+<div class="grid-2">
+
+  <div class="section">
+    <div class="sec-head">SMTP / Configuratie</div>
+    <table>
+      <tbody>
+        {% for k, v in env.items() %}
+        <tr>
+          <td class="text-dim mono" style="width:170px;">{{ k }}</td>
+          <td>
+            {% if 'PASSWORD' in k or 'SECRET' in k %}
+              <span class="text-dim">••••••••</span>
+            {% elif v %}
+              <span class="mono">{{ v }}</span>
+            {% else %}
+              <span class="text-dim">niet ingesteld</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="padding:10px 16px; font-size:11px; color:var(--text-dim); border-top:1px solid var(--border);">
+      Pas aan in het <span class="mono">.env</span> bestand
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sec-head">
+      <span>Al gereviewd</span>
+      <span class="badge b-dim">{{ reviewed|length }}</span>
+    </div>
+    <form method="post" style="padding:12px 16px; border-bottom:1px solid var(--border);">
+      <input type="hidden" name="action" value="add_reviewed">
+      <div class="flex gap-8">
+        <input type="text" name="naam" placeholder="Voornaam Achternaam"
+               style="flex:1; max-width:none;" required>
+        <button type="submit" class="btn btn-primary">+ Toevoegen</button>
+      </div>
+    </form>
+    {% if reviewed %}
+    <table>
+      <tbody>
+        {% for naam in reviewed %}
+        <tr>
+          <td>{{ naam }}</td>
+          <td style="text-align:right; padding-right:12px;">
+            <form method="post" style="display:inline;">
+              <input type="hidden" name="action" value="delete_reviewed">
+              <input type="hidden" name="naam" value="{{ naam }}">
+              <button type="submit" class="btn btn-ghost btn-sm">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">Geen namen toegevoegd</div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

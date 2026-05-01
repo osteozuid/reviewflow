@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}Logs{% endblock %}
+{% block content %}
+
+<div class="ptitle">Logs</div>
+
+<div class="flex gap-8 mb-16">
+  <a href="{{ url_for('export_log') }}" class="btn btn-ghost">↓ Exporteer CSV</a>
+</div>
+
+<div class="section mb-16">
+  <div class="sec-head">Run history</div>
+  {% if runs %}
+  <table>
+    <thead>
+      <tr><th>Datum</th><th>Modus</th><th>Gemaild</th><th>Overgeslagen</th><th>Gelezen</th></tr>
+    </thead>
+    <tbody>
+      {% for r in runs %}
+      <tr>
+        <td>{{ r.import_at|fmtdt }}</td>
+        <td><span class="badge {{ 'b-green' if r.modus == 'send' else 'b-dim' }}">{{ r.modus }}</span></td>
+        <td class="text-ok">{{ r.gemaild }}</td>
+        <td class="text-dim">{{ r.overgeslagen }}</td>
+        <td class="text-dim">{{ r.rijen_gelezen }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Nog geen runs uitgevoerd</div>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="sec-head">
+    <span>Verzonden mails</span>
+    <span class="text-dim" style="font-size:11px">{{ sent|length }} (laatste 100)</span>
+  </div>
+  {% if sent %}
+  <table>
+    <thead>
+      <tr><th>Naam</th><th>E-mail</th><th>Verstuurd</th><th>Bestand</th></tr>
+    </thead>
+    <tbody>
+      {% for s in sent %}
+      <tr>
+        <td>{{ s.naam }}</td>
+        <td class="text-dim mono">{{ s.email }}</td>
+        <td class="text-dim">{{ s.sent_at|fmtdt }}</td>
+        <td class="text-dim">{{ s.bestand or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Nog geen mails verstuurd</div>
+  {% endif %}
+</div>
+
+{% endblock %}
