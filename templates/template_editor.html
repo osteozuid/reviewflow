@@ -2,6 +2,14 @@
 {% block breadcrumb %}{{ 'Template bewerken' if template else 'Nieuwe template' }}{% endblock %}
 {% block content %}
 
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<style>
+  .ql-toolbar.ql-snow { border:1px solid var(--border); border-bottom:none; border-radius:var(--r) var(--r) 0 0; background:var(--surface2); }
+  .ql-container.ql-snow { border:1px solid var(--border); border-radius:0 0 var(--r) var(--r); font-family:Calibri,Arial,sans-serif; font-size:14px; }
+  .ql-editor { min-height:360px; line-height:1.7; }
+  .ql-editor p { margin:0 0 12px; }
+</style>
+
 <div class="flex gap-12 align-center mb-24">
   <a href="{{ url_for('templates_list') }}" class="btn btn-ghost btn-sm">← Terug</a>
   <div class="ptitle" style="margin:0;">{{ 'Template bewerken' if template else 'Nieuwe template' }}</div>
@@ -48,28 +56,38 @@
 
   <div class="section mb-24">
     <div class="editor-tabs">
-      <div class="editor-tab active" onclick="switchTab('html')">✎ HTML bewerken</div>
-      <div class="editor-tab" onclick="switchTab('preview')">👁 Preview</div>
+      <div class="editor-tab active" id="tab-visual" onclick="switchTab('visual')">✏ Visueel</div>
+      <div class="editor-tab" id="tab-html"   onclick="switchTab('html')">⟨/⟩ HTML</div>
+      <div class="editor-tab" id="tab-preview" onclick="switchTab('preview')">👁 Preview</div>
     </div>
 
-    <div class="editor-pane active" id="pane-html" style="padding:20px;">
+    <!-- VISUEEL -->
+    <div class="editor-pane active" id="pane-visual" style="padding:20px;">
       <div class="alert alert-info mb-16">
         <span>ℹ</span>
-        <span>Schrijf de volledige e-mail in HTML. De knop "Schrijf uw Google review" heeft
-        al een oranje stijl in de voorbeeldtemplates. Gebruik <code>{{voornaam}}</code> en <code>{{google_link}}</code> als variabelen.</span>
+        <span>Gebruik de opmaakbalk voor vetgedrukt, cursief, lettergrootte, kleur, enz. Gebruik de <strong>Variabelen</strong> rechts om namen en links in te voegen.</span>
+      </div>
+      <div id="quill-editor"></div>
+    </div>
+
+    <!-- HTML -->
+    <div class="editor-pane" id="pane-html" style="padding:20px;">
+      <div class="alert alert-info mb-16">
+        <span>ℹ</span>
+        <span>Volledige HTML e-mail. Gebruik <code>{{voornaam}}</code> en <code>{{google_link}}</code> als variabelen.</span>
       </div>
       <textarea id="html-editor" name="body_html" class="w-full"
                 style="height:420px; font-family:Consolas,monospace; font-size:12px; line-height:1.6;"
-                placeholder="Typ hier uw HTML e-mail..."
-                oninput="syncPreview()">{{ template.body_html if template else '' }}</textarea>
+                placeholder="Typ hier uw HTML e-mail...">{{ template.body_html if template else '' }}</textarea>
     </div>
 
+    <!-- PREVIEW -->
     <div class="editor-pane" id="pane-preview" style="padding:20px;">
       <div class="alert alert-info mb-16">
         <span>ℹ</span>
-        <span>Preview met voorbeelddata: voornaam = <strong>Jan</strong>, google link = knop hieronder.</span>
+        <span>Preview met voorbeelddata: voornaam = <strong>Jan</strong>.</span>
       </div>
-      <div style="border:1px solid var(--border); border-radius:var(--r); overflow:hidden; background:#f9f9f9;">
+      <div style="border:1px solid var(--border); border-radius:var(--r); overflow:hidden;">
         <div style="padding:8px 16px; background:var(--surface2); border-bottom:1px solid var(--border); font-size:12px; color:var(--text-dim);">
           Preview e-mail
         </div>
@@ -87,36 +105,117 @@
 
 {% endblock %}
 {% block scripts %}
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 <script>
-const editor = document.getElementById('html-editor');
-const frame  = document.getElementById('preview-frame');
+let quill;
+let activeTab = 'visual';
 
-function switchTab(tab) {
-  document.querySelectorAll('.editor-tab').forEach((t,i) => {
-    t.classList.toggle('active', (i===0 && tab==='html') || (i===1 && tab==='preview'));
-  });
-  document.getElementById('pane-html').classList.toggle('active', tab==='html');
-  document.getElementById('pane-preview').classList.toggle('active', tab==='preview');
-  if (tab === 'preview') syncPreview();
+function getBodyContent(html) {
+  const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return m ? m[1].trim() : html;
+}
+
+function setBodyContent(fullHtml, newBody) {
+  if (/<body[^>]*>/i.test(fullHtml)) {
+    return fullHtml.replace(/(<body[^>]*>)([\s\S]*)(<\/body>)/i, '$1\n' + newBody + '\n$3');
+  }
+  return wrapEmail(newBody);
+}
+
+function wrapEmail(body) {
+  return `<!DOCTYPE html>
+<html lang="nl">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:Calibri,Candara,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
+  <tr><td style="max-width:600px;margin:0 auto;padding:32px 24px;">
+${body}
+  </td></tr>
+</table>
+</body>
+</html>`;
+}
+
+function syncQuillToHtml() {
+  const current = document.getElementById('html-editor').value;
+  const quillHtml = quill.root.innerHTML;
+  document.getElementById('html-editor').value = setBodyContent(current, quillHtml);
+}
+
+function syncHtmlToQuill() {
+  const html = document.getElementById('html-editor').value;
+  const body = getBodyContent(html);
+  quill.clipboard.dangerouslyPasteHTML(0, body);
 }
 
 function syncPreview() {
-  let html = editor.value;
-  html = html.replace(/\{\{voornaam\}\}/g, 'Jan');
-  html = html.replace(/\{\{google_link\}\}/g, '#');
+  let html = document.getElementById('html-editor').value;
+  if (activeTab === 'visual') {
+    const quillHtml = quill ? quill.root.innerHTML : '';
+    html = setBodyContent(html, quillHtml);
+  }
+  if (!html.trim()) return;
+  html = html.replace(/\{\{voornaam\}\}/g, 'Jan')
+             .replace(/\{\{google_link\}\}/g, '#');
+  const frame = document.getElementById('preview-frame');
   const doc = frame.contentDocument || frame.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
 }
 
-function insertVar(v) {
-  const start = editor.selectionStart;
-  const end   = editor.selectionEnd;
-  editor.value = editor.value.slice(0, start) + v + editor.value.slice(end);
-  editor.selectionStart = editor.selectionEnd = start + v.length;
-  editor.focus();
+function switchTab(tab) {
+  if (activeTab === 'visual' && tab !== 'visual') syncQuillToHtml();
+  if (activeTab === 'html'   && tab === 'visual') syncHtmlToQuill();
+
+  activeTab = tab;
+
+  document.querySelectorAll('.editor-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.editor-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('pane-' + tab).classList.add('active');
+
+  if (tab === 'preview') syncPreview();
 }
 
-// Init preview if editing existing template
-if (editor.value.trim()) syncPreview();
+function insertVar(v) {
+  if (activeTab === 'visual') {
+    const range = quill.getSelection(true);
+    quill.insertText(range ? range.index : quill.getLength(), v, 'user');
+  } else {
+    const ed = document.getElementById('html-editor');
+    const s = ed.selectionStart;
+    ed.value = ed.value.slice(0, s) + v + ed.value.slice(ed.selectionEnd);
+    ed.selectionStart = ed.selectionEnd = s + v.length;
+    ed.focus();
+  }
+}
+
+document.getElementById('tpl-form').addEventListener('submit', function() {
+  if (activeTab === 'visual') syncQuillToHtml();
+});
+
+window.addEventListener('DOMContentLoaded', function() {
+  quill = new Quill('#quill-editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        [{ header: [1, 2, 3, false] }],
+        [{ font: [] }, { size: ['small', false, 'large', 'huge'] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ color: [] }, { background: [] }],
+        [{ align: [] }],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['link'],
+        ['clean']
+      ]
+    },
+    placeholder: 'Schrijf uw e-mail hier...'
+  });
+
+  const htmlContent = document.getElementById('html-editor').value;
+  if (htmlContent.trim()) {
+    const body = getBodyContent(htmlContent);
+    quill.clipboard.dangerouslyPasteHTML(0, body);
+  }
+});
 </script>
 {% endblock %}
