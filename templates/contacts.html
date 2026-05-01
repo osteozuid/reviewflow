@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}Contacten{% endblock %}
+{% block content %}
+
+<div class="ptitle">Contacten</div>
+<div class="ptitle-sub">Alle patiënten die ooit een review request ontvangen hebben.</div>
+
+<div class="flex gap-8 mb-16">
+  <a href="{{ url_for('contacts_export_csv') }}" class="btn btn-ghost">↓ Exporteer CSV</a>
+  <a href="{{ url_for('contacts_export_xlsx') }}" class="btn btn-ghost">↓ Exporteer Excel</a>
+  <span class="badge b-dim" style="align-self:center;">{{ contacts|length }} contacten</span>
+</div>
+
+<div class="section">
+  <div class="sec-head">
+    <span>Overzicht</span>
+  </div>
+  {% if contacts %}
+  <table>
+    <thead>
+      <tr>
+        <th>Naam</th>
+        <th>E-mail</th>
+        <th>Eerste mail</th>
+        <th>Laatste mail</th>
+        <th style="text-align:center;">Aantal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in contacts %}
+      {% set letter = c.naam[0].upper() if c.naam else '?' %}
+      {% set colors = ['#f28c00','#10b981','#0ea5e9','#8b5cf6','#ef4444','#f59e0b','#06b6d4','#ec4899'] %}
+      {% set color = colors[loop.index0 % colors|length] %}
+      <tr>
+        <td>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div class="contact-avatar" style="background:{{ color }};">{{ letter }}</div>
+            <span class="fw-600">{{ c.naam or '—' }}</span>
+          </div>
+        </td>
+        <td class="mono text-dim">{{ c.email }}</td>
+        <td class="text-dim">{{ c.eerste_mail[:10] if c.eerste_mail else '—' }}</td>
+        <td class="text-dim">{{ c.laatste_mail[:10] if c.laatste_mail else '—' }}</td>
+        <td style="text-align:center;">
+          <span class="badge {{ 'b-orange' if c.aantal_mails > 1 else 'b-dim' }}">{{ c.aantal_mails }}</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    Nog geen contacten.<br>
+    <span class="text-dim" style="font-size:12px;">Contacten worden automatisch toegevoegd na het versturen van review requests.</span>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

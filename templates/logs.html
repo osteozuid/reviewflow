@@ -3,12 +3,13 @@
 {% block content %}
 
 <div class="ptitle">Logs</div>
+<div class="ptitle-sub">Historie van runs en verzonden review requests.</div>
 
-<div class="flex gap-8 mb-16">
-  <a href="{{ url_for('export_log') }}" class="btn btn-ghost">↓ Exporteer CSV</a>
+<div class="flex gap-8 mb-24">
+  <a href="{{ url_for('export_log') }}" class="btn btn-ghost">↓ Exporteer verzendlog CSV</a>
 </div>
 
-<div class="section mb-16">
+<div class="section mb-24">
   <div class="sec-head">Run history</div>
   {% if runs %}
   <table>
@@ -18,9 +19,13 @@
     <tbody>
       {% for r in runs %}
       <tr>
-        <td>{{ r.import_at|fmtdt }}</td>
-        <td><span class="badge {{ 'b-green' if r.modus == 'send' else 'b-dim' }}">{{ r.modus }}</span></td>
-        <td class="text-ok">{{ r.gemaild }}</td>
+        <td class="fw-600">{{ r.import_at|fmtdt }}</td>
+        <td>
+          <span class="badge {{ 'b-green' if r.modus == 'send' else ('b-orange' if r.modus == 'test' else 'b-dim') }}">
+            {{ r.modus }}
+          </span>
+        </td>
+        <td class="text-ok fw-600">{{ r.gemaild }}</td>
         <td class="text-dim">{{ r.overgeslagen }}</td>
         <td class="text-dim">{{ r.rijen_gelezen }}</td>
       </tr>
@@ -35,20 +40,20 @@
 <div class="section">
   <div class="sec-head">
     <span>Verzonden mails</span>
-    <span class="text-dim" style="font-size:11px">{{ sent|length }} (laatste 100)</span>
+    <span class="text-dim" style="font-size:11px; font-weight:400; text-transform:none;">{{ sent|length }} (laatste 100)</span>
   </div>
   {% if sent %}
   <table>
     <thead>
-      <tr><th>Naam</th><th>E-mail</th><th>Verstuurd</th><th>Bestand</th></tr>
+      <tr><th>Naam</th><th>E-mail</th><th>Verstuurd op</th><th>Bestand</th></tr>
     </thead>
     <tbody>
       {% for s in sent %}
       <tr>
-        <td>{{ s.naam }}</td>
+        <td class="fw-600">{{ s.naam }}</td>
         <td class="text-dim mono">{{ s.email }}</td>
         <td class="text-dim">{{ s.sent_at|fmtdt }}</td>
-        <td class="text-dim">{{ s.bestand or '—' }}</td>
+        <td class="text-dim" style="font-size:12px;">{{ s.bestand or '—' }}</td>
       </tr>
       {% endfor %}
     </tbody>

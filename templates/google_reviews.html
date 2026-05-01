@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}Google Reviews{% endblock %}
+{% block content %}
+
+<div class="ptitle">Google Reviews</div>
+<div class="ptitle-sub">Recente beoordelingen van Osteozuid via Google.</div>
+
+{% if error %}
+<div class="alert alert-warning mb-24">
+  <span>⚠</span>
+  <div>
+    <strong>Reviews kunnen niet worden geladen.</strong><br>
+    {{ error }}<br>
+    {% if 'API key' in error or 'Place ID' in error or 'vereist' in error %}
+    <a href="{{ url_for('settings') }}" class="btn btn-ghost btn-sm mt-12" style="margin-top:8px;">
+      ⚙ Ga naar Instellingen
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if overall_rating %}
+<div class="section mb-24">
+  <div class="rating-summary">
+    <div>
+      <div class="rating-big">{{ '%.1f'|format(overall_rating) }}</div>
+    </div>
+    <div>
+      <div class="rating-stars">
+        {% for i in range(5) %}
+          {% if i < overall_rating|int %}
+            <span style="color:#f59e0b; font-size:24px;">★</span>
+          {% else %}
+            <span style="color:#e5e7eb; font-size:24px;">★</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+      <div class="rating-count">{{ total_ratings }} beoordelingen in totaal</div>
+    </div>
+    <div style="margin-left:auto;">
+      <a href="https://g.page/r/CdMCyaACSj-JEBM/review" target="_blank" class="btn btn-primary">
+        ★ Alle reviews bekijken
+      </a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if reviews %}
+<div class="section">
+  <div class="sec-head">
+    <span>Recente beoordelingen</span>
+    <span class="badge b-dim">{{ reviews|length }} (max 5 via API)</span>
+  </div>
+  <div class="review-list">
+    {% for r in reviews %}
+    {% set letter = r.author_name[0].upper() if r.author_name else '?' %}
+    {% set avatar_colors = ['#4285f4','#ea4335','#34a853','#8b5cf6','#f59e0b','#06b6d4','#ec4899','#f28c00'] %}
+    {% set av_color = avatar_colors[loop.index0 % avatar_colors|length] %}
+    <div class="review-item">
+      <div class="review-avatar" style="background:{{ av_color }};">{{ letter }}</div>
+      <div class="review-body">
+        <div class="flex align-center gap-8" style="margin-bottom:4px;">
+          <span class="review-author">{{ r.author_name }}</span>
+          <span class="b-new badge">NIEUW</span>
+        </div>
+        <div class="review-stars">
+          {% for i in range(5) %}
+            {% if i < r.rating %}
+              <span class="star-filled">★</span>
+            {% else %}
+              <span class="star-empty">★</span>
+            {% endif %}
+          {% endfor %}
+          <span class="review-time">{{ r.relative_time_description or '' }}</span>
+        </div>
+        {% if r.text %}
+        <div class="review-text">{{ r.text }}</div>
+        {% else %}
+        <div class="text-dim" style="font-size:12px; font-style:italic;">Geen tekst bij deze review</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="alert alert-info mt-12">
+  <span>ℹ</span>
+  <span>Google Places API geeft maximaal 5 recente reviews terug. Voor het volledige overzicht,
+  <a href="https://g.page/r/CdMCyaACSj-JEBM/review" target="_blank" style="color:var(--teal);">open Google Maps</a>.</span>
+</div>
+
+{% elif not error %}
+<div class="section">
+  <div class="empty">
+    Geen reviews gevonden.<br>
+    <span class="text-dim" style="font-size:12px;">Controleer of de Google Places API key en Place ID correct zijn ingesteld.</span>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

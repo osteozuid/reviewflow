@@ -3,56 +3,76 @@
 {% block content %}
 
 <div class="ptitle">Dashboard</div>
+<div class="ptitle-sub">Overzicht van alle review request activiteit.</div>
 
 <div class="cards">
-  <div class="card c-blue">
+  <div class="card c-orange">
+    <div class="card-icon i-orange">📨</div>
     <div class="card-label">Totaal verstuurd</div>
     <div class="card-val">{{ total }}</div>
-    <div class="card-sub">review requests</div>
+    <div class="card-sub">review requests ooit</div>
   </div>
-  <div class="card c-teal">
+  <div class="card c-blue">
+    <div class="card-icon i-blue">📅</div>
     <div class="card-label">Deze maand</div>
     <div class="card-val">{{ this_month }}</div>
     <div class="card-sub">verstuurd</div>
   </div>
-  <div class="card c-warn">
+  <div class="card c-purple">
+    <div class="card-icon i-purple">🚫</div>
     <div class="card-label">Al gereviewd</div>
     <div class="card-val">{{ reviewed_count }}</div>
     <div class="card-sub">namen geblokkeerd</div>
   </div>
   <div class="card c-green">
-    <div class="card-label">Volgende run</div>
-    <div class="card-val" style="font-size:15px; padding-top:5px;">{{ next_run or '—' }}</div>
+    <div class="card-icon i-green">⏰</div>
+    <div class="card-label">Volgende automatische run</div>
+    <div class="card-val" style="font-size:16px; padding-top:4px;">{{ next_run or '—' }}</div>
     <div class="card-sub">
       {% if schedule and schedule.actief %}{{ schedule.modus }}{% else %}niet gepland{% endif %}
     </div>
   </div>
 </div>
 
-<div class="flex gap-8 mb-16">
+<div class="flex gap-8 mb-24">
   <a href="{{ url_for('upload') }}" class="btn btn-ghost">↑ Upload CSV / Excel</a>
   <a href="{{ url_for('run_page') }}" class="btn btn-primary">▶ Uitvoeren</a>
   {% if input_count > 0 %}
-    <span class="badge b-blue" style="align-self:center;">{{ input_count }} bestand(en) klaar</span>
+    <span class="badge b-orange" style="align-self:center;">{{ input_count }} bestand(en) klaar</span>
   {% endif %}
 </div>
 
+<div class="grid-2">
+
 {% if last_run %}
-<div class="section mb-16">
+<div class="section">
   <div class="sec-head">
     <span>Laatste run</span>
     <span class="badge {{ 'b-green' if last_run.modus == 'send' else 'b-dim' }}">{{ last_run.modus }}</span>
   </div>
   <table>
     <tbody>
-      <tr><td class="text-dim" style="width:140px">Datum</td><td>{{ last_run.import_at|fmtdt }}</td></tr>
-      <tr><td class="text-dim">Gemaild</td><td class="text-ok">{{ last_run.gemaild }}</td></tr>
+      <tr><td class="text-dim" style="width:130px">Datum</td><td class="fw-600">{{ last_run.import_at|fmtdt }}</td></tr>
+      <tr><td class="text-dim">Gemaild</td><td class="text-ok fw-600">{{ last_run.gemaild }}</td></tr>
       <tr><td class="text-dim">Overgeslagen</td><td class="text-dim">{{ last_run.overgeslagen }}</td></tr>
-      <tr><td class="text-dim">Gelezen</td><td class="text-dim">{{ last_run.rijen_gelezen }}</td></tr>
+      <tr><td class="text-dim">Rijen gelezen</td><td class="text-dim">{{ last_run.rijen_gelezen }}</td></tr>
     </tbody>
   </table>
 </div>
 {% endif %}
+
+<div class="section">
+  <div class="sec-head">
+    <span>Snelle acties</span>
+  </div>
+  <div style="padding:16px 20px; display:flex; flex-direction:column; gap:10px;">
+    <a href="{{ url_for('templates_list') }}" class="btn btn-ghost">✉ Beheer e-mail templates</a>
+    <a href="{{ url_for('google_reviews_page') }}" class="btn btn-ghost">★ Bekijk Google reviews</a>
+    <a href="{{ url_for('export_log') }}" class="btn btn-ghost">↓ Exporteer verzendlog</a>
+  </div>
+</div>
+
+</div>
 
 <div class="section">
   <div class="sec-head">
@@ -62,12 +82,20 @@
   {% if recent %}
   <table>
     <thead>
-      <tr><th>Naam</th><th>E-mail</th><th>Verstuurd</th></tr>
+      <tr><th>Naam</th><th>E-mail</th><th>Verstuurd op</th></tr>
     </thead>
     <tbody>
       {% for r in recent %}
+      {% set letter = r.naam[0].upper() if r.naam else '?' %}
+      {% set colors = ['#f28c00','#10b981','#0ea5e9','#8b5cf6','#ef4444','#f59e0b'] %}
+      {% set color = colors[loop.index0 % colors|length] %}
       <tr>
-        <td>{{ r.naam }}</td>
+        <td>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="contact-avatar" style="background:{{ color }}; width:26px; height:26px; font-size:11px;">{{ letter }}</div>
+            {{ r.naam }}
+          </div>
+        </td>
         <td class="text-dim mono">{{ r.email }}</td>
         <td class="text-dim">{{ r.sent_at|fmtdt }}</td>
       </tr>

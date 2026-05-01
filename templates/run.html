@@ -3,12 +3,21 @@
 {% block content %}
 
 <div class="ptitle">Uitvoeren</div>
+<div class="ptitle-sub">Kies een modus om review requests te analyseren of te versturen.</div>
+
+{% if send_geblokkeerd %}
+<div class="alert alert-warning mb-24">
+  <span>🔒</span>
+  <strong>Versturen is geblokkeerd (testmodus actief).</strong>
+  Ga naar <a href="{{ url_for('settings') }}" style="color:var(--warning);">Instellingen</a> om dit uit te schakelen.
+</div>
+{% endif %}
 
 <div class="run-grid">
   <form method="post" action="{{ url_for('run_start') }}" class="run-form">
     <input type="hidden" name="modus" value="dry">
     <button type="submit" class="run-card">
-      <div class="rc-icon" style="color:#858585;">◉</div>
+      <div class="rc-icon">🔍</div>
       <div class="rc-title">Dry Run</div>
       <div class="rc-desc">Analyseer wie een mail zou krijgen.<br>Geen mails worden verstuurd.</div>
     </button>
@@ -17,18 +26,18 @@
   <form method="post" action="{{ url_for('run_start') }}" class="run-form">
     <input type="hidden" name="modus" value="test">
     <input type="hidden" name="test_email" value="{{ admin }}">
-    <button type="submit" class="run-card">
-      <div class="rc-icon" style="color:#ce9178;">◎</div>
+    <button type="submit" class="run-card c-orange">
+      <div class="rc-icon">🧪</div>
       <div class="rc-title">Test versturen</div>
-      <div class="rc-desc">Stuurt alle mails naar:<br><span class="mono">{{ admin }}</span></div>
+      <div class="rc-desc">Stuurt alle mails naar:<br><span class="mono" style="color:var(--accent);">{{ admin }}</span></div>
     </button>
   </form>
 
   <form method="post" action="{{ url_for('run_start') }}" class="run-form"
-        onsubmit="return confirm('Echte mails versturen naar patiënten?')">
+        onsubmit="return confirm('Echte mails versturen naar patiënten?\n\nDit kan niet ongedaan worden gemaakt.')">
     <input type="hidden" name="modus" value="send">
-    <button type="submit" class="run-card">
-      <div class="rc-icon" style="color:#4ec9b0;">▶</div>
+    <button type="submit" class="run-card c-green" {% if send_geblokkeerd %}disabled style="opacity:.5;cursor:not-allowed;"{% endif %}>
+      <div class="rc-icon">📨</div>
       <div class="rc-title">Versturen</div>
       <div class="rc-desc">Verstuurt echte mails naar patiënten.<br>Database wordt bijgewerkt.</div>
     </button>
@@ -37,13 +46,13 @@
 
 <div class="section">
   <div class="sec-head">
-    <span id="log-title">Log</span>
+    <span id="log-title">Log output</span>
     <span id="log-badge" class="badge b-dim">wacht</span>
   </div>
   <div class="log-panel" id="log-panel">
     <span class="ldim">Kies een modus hierboven om te starten...</span>
   </div>
-  <div class="sum-grid" id="summary" style="display:none; padding:12px;">
+  <div class="sum-grid" id="summary" style="display:none;">
     <div class="sum-box">
       <div class="sum-num" id="s-kand">—</div>
       <div class="sum-lbl">Kandidaten</div>
@@ -98,7 +107,7 @@ function fetchStatus() {
       }
 
       if (d.done) {
-        badge.textContent = 'klaar';
+        badge.textContent = 'klaar ✓';
         badge.className = 'badge b-green';
         clearInterval(poll); poll = null;
         if (d.counts && d.counts.kandidaten !== undefined) {
@@ -116,12 +125,10 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// Auto-start if a run is already active
 fetch('/api/run/status').then(r => r.json()).then(d => {
   if (d.active || (d.done && d.lines && d.lines.length)) startPoll();
 });
 
-// Start polling after form submit
 document.querySelectorAll('.run-form').forEach(f => {
   f.addEventListener('submit', () => setTimeout(startPoll, 600));
 });

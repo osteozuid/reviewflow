@@ -3,12 +3,13 @@
 {% block content %}
 
 <div class="ptitle">Bestanden uploaden</div>
+<div class="ptitle-sub">Upload een CSV of Excel export van MyOrganizer, Crossuite of andere agenda-software.</div>
 
 <form method="post" enctype="multipart/form-data" id="upform">
   <div class="dropzone" id="dz" onclick="document.getElementById('fi').click()">
-    <div class="dz-icon">↑</div>
+    <div class="dz-icon">☁</div>
     <div class="dz-text">Sleep bestanden hier of klik om te kiezen</div>
-    <div class="dz-hint">CSV of Excel export van MyOrganizer / andere agenda</div>
+    <div class="dz-hint">Ondersteunde formaten: .csv, .xlsx, .xls (MyOrganizer / agenda export)</div>
   </div>
   <input type="file" id="fi" name="files" multiple accept=".csv,.xlsx,.xls"
          style="display:none" onchange="this.form.submit()">
@@ -16,31 +17,41 @@
 
 <div class="section">
   <div class="sec-head">
-    <span>Bestanden in input/</span>
-    <span class="text-dim" style="font-size:11px">{{ files|length }} bestand(en)</span>
+    <span>Bestanden in wachtrij (input/)</span>
+    <span class="badge {{ 'b-orange' if files|length > 0 else 'b-dim' }}">{{ files|length }} bestand(en)</span>
   </div>
   {% if files %}
   <table>
     <thead>
-      <tr><th>Naam</th><th>Grootte</th><th>Gewijzigd</th><th></th></tr>
+      <tr><th>Bestandsnaam</th><th>Grootte</th><th>Gewijzigd</th><th></th></tr>
     </thead>
     <tbody>
       {% for f in files %}
       <tr>
-        <td class="mono">{{ f.name }}</td>
+        <td>
+          <span style="font-size:16px; margin-right:8px;">📄</span>
+          <span class="mono fw-600">{{ f.name }}</span>
+        </td>
         <td class="text-dim">{{ f.size }}</td>
         <td class="text-dim">{{ f.modified }}</td>
-        <td style="text-align:right; padding-right:12px;">
+        <td style="text-align:right; padding-right:16px;">
           <a href="{{ url_for('delete_file', filename=f.name) }}"
              class="btn btn-danger btn-sm"
-             onclick="return confirm('{{ f.name }} verwijderen?')">✕</a>
+             onclick="return confirm('{{ f.name }} verwijderen uit de wachtrij?')">✕ Verwijderen</a>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  <div style="padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:10px; align-items:center;">
+    <a href="{{ url_for('run_page') }}" class="btn btn-primary">▶ Uitvoeren →</a>
+    <span class="text-dim" style="font-size:12px;">{{ files|length }} bestand(en) klaar voor verwerking</span>
+  </div>
   {% else %}
-  <div class="empty">Geen bestanden. Upload een CSV of Excel export van je agenda.</div>
+  <div class="empty">
+    Geen bestanden. Upload een CSV of Excel export om te beginnen.<br>
+    <span class="text-dim" style="font-size:12px; margin-top:6px; display:block;">Bestanden blijven staan totdat je ze verwijdert.</span>
+  </div>
   {% endif %}
 </div>
 

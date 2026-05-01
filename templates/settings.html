@@ -3,68 +3,157 @@
 {% block content %}
 
 <div class="ptitle">Instellingen</div>
+<div class="ptitle-sub">SMTP, Google, MyOrganizer en veiligheidsinstellingen.</div>
+
+<form method="post">
+  <input type="hidden" name="action" value="save_settings">
 
 <div class="grid-2">
 
-  <div class="section">
-    <div class="sec-head">SMTP / Configuratie</div>
-    <table>
-      <tbody>
-        {% for k, v in env.items() %}
-        <tr>
-          <td class="text-dim mono" style="width:170px;">{{ k }}</td>
-          <td>
-            {% if 'PASSWORD' in k or 'SECRET' in k %}
-              <span class="text-dim">••••••••</span>
-            {% elif v %}
-              <span class="mono">{{ v }}</span>
-            {% else %}
-              <span class="text-dim">niet ingesteld</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <div style="padding:10px 16px; font-size:11px; color:var(--text-dim); border-top:1px solid var(--border);">
-      Pas aan in het <span class="mono">.env</span> bestand
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="sec-head">
-      <span>Al gereviewd</span>
-      <span class="badge b-dim">{{ reviewed|length }}</span>
-    </div>
-    <form method="post" style="padding:12px 16px; border-bottom:1px solid var(--border);">
-      <input type="hidden" name="action" value="add_reviewed">
-      <div class="flex gap-8">
-        <input type="text" name="naam" placeholder="Voornaam Achternaam"
-               style="flex:1; max-width:none;" required>
-        <button type="submit" class="btn btn-primary">+ Toevoegen</button>
+  <!-- SMTP -->
+  <div class="section" style="margin:0;">
+    <div class="sec-head">📧 SMTP Instellingen</div>
+    <div style="padding:20px;">
+      <div class="form-group">
+        <label class="form-label">SMTP Server</label>
+        <input type="text" name="smtp_host" value="{{ cfg.smtp_host }}" placeholder="send.one.com">
       </div>
-    </form>
-    {% if reviewed %}
-    <table>
-      <tbody>
-        {% for naam in reviewed %}
-        <tr>
-          <td>{{ naam }}</td>
-          <td style="text-align:right; padding-right:12px;">
-            <form method="post" style="display:inline;">
-              <input type="hidden" name="action" value="delete_reviewed">
-              <input type="hidden" name="naam" value="{{ naam }}">
-              <button type="submit" class="btn btn-ghost btn-sm">✕</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="empty">Geen namen toegevoegd</div>
-    {% endif %}
+      <div class="form-group">
+        <label class="form-label">SMTP Poort</label>
+        <input type="number" name="smtp_port" value="{{ cfg.smtp_port }}" placeholder="587" style="max-width:120px;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Gebruikersnaam (e-mailadres)</label>
+        <input type="email" name="smtp_user" value="{{ cfg.smtp_user }}" placeholder="info@osteozuid.be">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Wachtwoord</label>
+        <input type="password" name="smtp_password" value="" placeholder="(leeg = ongewijzigd)">
+        <div class="form-hint">Laat leeg om het huidige wachtwoord te bewaren.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Afzendernaam</label>
+        <input type="text" name="from_name" value="{{ cfg.from_name }}" placeholder="Osteozuid Groepspraktijk">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Afzenderadres</label>
+        <input type="email" name="from_email" value="{{ cfg.from_email }}" placeholder="info@osteozuid.be">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Admin e-mail (testmails naar)</label>
+        <input type="email" name="admin_email" value="{{ cfg.admin_email }}" placeholder="jij@gmail.com">
+      </div>
+    </div>
   </div>
 
+  <!-- Google & Veiligheid -->
+  <div style="display:flex; flex-direction:column; gap:16px;">
+
+    <div class="section" style="margin:0;">
+      <div class="sec-head">⭐ Google Instellingen</div>
+      <div style="padding:20px;">
+        <div class="form-group">
+          <label class="form-label">Google Review Link</label>
+          <input type="url" name="google_review_link" class="w-full"
+                 value="{{ cfg.google_review_link }}"
+                 placeholder="https://g.page/r/.../review">
+          <div class="form-hint">De link in de e-mail waarop patiënten klikken.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Google Places API Key</label>
+          <input type="text" name="google_places_api_key" class="w-full"
+                 value="{{ cfg.google_places_api_key }}"
+                 placeholder="AIza...">
+          <div class="form-hint">Voor het ophalen van bestaande reviews (optioneel).</div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Google Place ID</label>
+          <input type="text" name="google_place_id" class="w-full"
+                 value="{{ cfg.get('google_place_id','') }}"
+                 placeholder="ChIJ...">
+          <div class="form-hint">Vereist voor de Reviews-pagina. Vind je Place ID via Google Maps → Deel → Kopieer link.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" style="margin:0;">
+      <div class="sec-head">🔒 Veiligheid</div>
+      <div style="padding:20px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+            <label class="toggle">
+              <input type="checkbox" name="send_geblokkeerd"
+                     {{ 'checked' if cfg.send_geblokkeerd == '1' }}>
+              <span class="slider"></span>
+            </label>
+            Versturen geblokkeerd (testmodus)
+          </label>
+          <div class="form-hint">Als ingeschakeld: "Versturen" werkt niet — alleen dry-run en testmail.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
 </div>
+
+<div style="margin:20px 0;">
+  <button type="submit" class="btn btn-primary btn-lg">💾 Instellingen opslaan</button>
+</div>
+
+</form>
+
+<!-- Al gereviewd -->
+<div class="section">
+  <div class="sec-head">
+    <span>👥 Al gereviewd — Namen blokkeren</span>
+    <span class="badge b-dim">{{ reviewed|length }}</span>
+  </div>
+  <form method="post" style="padding:16px 20px; border-bottom:1px solid var(--border);">
+    <input type="hidden" name="action" value="add_reviewed">
+    <div class="flex gap-8 align-center">
+      <input type="text" name="naam" placeholder="Voornaam Achternaam" style="max-width:260px;" required>
+      <button type="submit" class="btn btn-primary">+ Toevoegen</button>
+    </div>
+    <div class="form-hint mt-12">Patiënten op deze lijst ontvangen geen review request meer (al review gegeven in praktijk).</div>
+  </form>
+  {% if reviewed %}
+  <table>
+    <thead><tr><th>Naam</th><th></th></tr></thead>
+    <tbody>
+      {% for naam in reviewed %}
+      <tr>
+        <td>{{ naam }}</td>
+        <td style="text-align:right; padding-right:16px; width:60px;">
+          <form method="post" style="margin:0;">
+            <input type="hidden" name="action" value="delete_reviewed">
+            <input type="hidden" name="naam" value="{{ naam }}">
+            <button type="submit" class="btn btn-ghost btn-sm">✕</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Geen namen toegevoegd</div>
+  {% endif %}
+</div>
+
+<!-- Logo upload -->
+<div class="section">
+  <div class="sec-head">🖼 Logo</div>
+  <form method="post" action="{{ url_for('upload_logo') }}" enctype="multipart/form-data"
+        style="padding:16px 20px;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">Logo uploaden (PNG, JPG, SVG)</label>
+      <div class="flex gap-8 align-center">
+        <input type="file" name="logo" accept=".png,.jpg,.jpeg,.svg,.gif"
+               style="max-width:300px; padding:4px 8px;">
+        <button type="submit" class="btn btn-ghost">Uploaden</button>
+      </div>
+      <div class="form-hint">Het logo kan worden gebruikt in e-mailtemplates via een afbeeldingstag.</div>
+    </div>
+  </form>
+</div>
+
 {% endblock %}

@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}{{ 'Template bewerken' if template else 'Nieuwe template' }}{% endblock %}
+{% block content %}
+
+<div class="flex gap-12 align-center mb-24">
+  <a href="{{ url_for('templates_list') }}" class="btn btn-ghost btn-sm">← Terug</a>
+  <div class="ptitle" style="margin:0;">{{ 'Template bewerken' if template else 'Nieuwe template' }}</div>
+</div>
+
+<form method="post" action="{{ url_for('template_save') }}" id="tpl-form">
+  {% if template %}<input type="hidden" name="id" value="{{ template.id }}">{% endif %}
+
+  <div class="grid-2 mb-24">
+    <div class="section" style="margin:0;">
+      <div class="sec-head">Basisinstellingen</div>
+      <div style="padding:20px;">
+        <div class="form-group">
+          <label class="form-label">Naam template</label>
+          <input type="text" name="naam" value="{{ template.naam if template else '' }}"
+                 placeholder="bijv. Vriendelijk, Professioneel..." required>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">E-mail onderwerp</label>
+          <input type="text" name="onderwerp" class="w-full"
+                 value="{{ template.onderwerp if template else '' }}"
+                 placeholder="bijv. Uw ervaring bij Osteozuid" required>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" style="margin:0;">
+      <div class="sec-head">Variabelen</div>
+      <div style="padding:20px; font-size:13px; color:var(--text-dim);">
+        <p style="margin-bottom:12px;">Klik om in te voegen op de cursorpositie:</p>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button type="button" onclick="insertVar('{{voornaam}}')" class="btn btn-ghost btn-sm" style="justify-content:flex-start;">
+            <code style="color:var(--accent);">{{voornaam}}</code>
+            <span style="margin-left:8px; color:var(--text-dim);">— Voornaam patiënt</span>
+          </button>
+          <button type="button" onclick="insertVar('{{google_link}}')" class="btn btn-ghost btn-sm" style="justify-content:flex-start;">
+            <code style="color:var(--accent);">{{google_link}}</code>
+            <span style="margin-left:8px; color:var(--text-dim);">— Google Review link</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section mb-24">
+    <div class="editor-tabs">
+      <div class="editor-tab active" onclick="switchTab('html')">✎ HTML bewerken</div>
+      <div class="editor-tab" onclick="switchTab('preview')">👁 Preview</div>
+    </div>
+
+    <div class="editor-pane active" id="pane-html" style="padding:20px;">
+      <div class="alert alert-info mb-16">
+        <span>ℹ</span>
+        <span>Schrijf de volledige e-mail in HTML. De knop "Schrijf uw Google review" heeft
+        al een oranje stijl in de voorbeeldtemplates. Gebruik <code>{{voornaam}}</code> en <code>{{google_link}}</code> als variabelen.</span>
+      </div>
+      <textarea id="html-editor" name="body_html" class="w-full"
+                style="height:420px; font-family:Consolas,monospace; font-size:12px; line-height:1.6;"
+                placeholder="Typ hier uw HTML e-mail..."
+                oninput="syncPreview()">{{ template.body_html if template else '' }}</textarea>
+    </div>
+
+    <div class="editor-pane" id="pane-preview" style="padding:20px;">
+      <div class="alert alert-info mb-16">
+        <span>ℹ</span>
+        <span>Preview met voorbeelddata: voornaam = <strong>Jan</strong>, google link = knop hieronder.</span>
+      </div>
+      <div style="border:1px solid var(--border); border-radius:var(--r); overflow:hidden; background:#f9f9f9;">
+        <div style="padding:8px 16px; background:var(--surface2); border-bottom:1px solid var(--border); font-size:12px; color:var(--text-dim);">
+          Preview e-mail
+        </div>
+        <iframe id="preview-frame" style="width:100%; height:500px; border:none; background:#fff;"
+                sandbox="allow-same-origin"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-8">
+    <button type="submit" class="btn btn-primary btn-lg">💾 Opslaan</button>
+    <a href="{{ url_for('templates_list') }}" class="btn btn-ghost btn-lg">Annuleren</a>
+  </div>
+</form>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const editor = document.getElementById('html-editor');
+const frame  = document.getElementById('preview-frame');
+
+function switchTab(tab) {
+  document.querySelectorAll('.editor-tab').forEach((t,i) => {
+    t.classList.toggle('active', (i===0 && tab==='html') || (i===1 && tab==='preview'));
+  });
+  document.getElementById('pane-html').classList.toggle('active', tab==='html');
+  document.getElementById('pane-preview').classList.toggle('active', tab==='preview');
+  if (tab === 'preview') syncPreview();
+}
+
+function syncPreview() {
+  let html = editor.value;
+  html = html.replace(/\{\{voornaam\}\}/g, 'Jan');
+  html = html.replace(/\{\{google_link\}\}/g, '#');
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open(); doc.write(html); doc.close();
+}
+
+function insertVar(v) {
+  const start = editor.selectionStart;
+  const end   = editor.selectionEnd;
+  editor.value = editor.value.slice(0, start) + v + editor.value.slice(end);
+  editor.selectionStart = editor.selectionEnd = start + v.length;
+  editor.focus();
+}
+
+// Init preview if editing existing template
+if (editor.value.trim()) syncPreview();
+</script>
+{% endblock %}
