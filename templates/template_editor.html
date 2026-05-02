@@ -56,9 +56,10 @@
 
   <div class="section mb-24">
     <div class="editor-tabs">
-      <div class="editor-tab active" id="tab-visual" onclick="switchTab('visual')">✏ Visueel</div>
-      <div class="editor-tab" id="tab-html"   onclick="switchTab('html')">⟨/⟩ HTML</div>
-      <div class="editor-tab" id="tab-preview" onclick="switchTab('preview')">👁 Preview</div>
+      <div class="editor-tab active" id="tab-visual"  onclick="switchTab('visual')">✏ Visueel</div>
+      <div class="editor-tab" id="tab-html"            onclick="switchTab('html')">⟨/⟩ HTML</div>
+      <div class="editor-tab" id="tab-preview"         onclick="switchTab('preview')">👁 Preview</div>
+      {% if template %}<div class="editor-tab" id="tab-testmail" onclick="switchTab('testmail')">📧 Testmail</div>{% endif %}
     </div>
 
     <!-- VISUEEL -->
@@ -95,6 +96,27 @@
                 sandbox="allow-same-origin"></iframe>
       </div>
     </div>
+    <!-- TESTMAIL -->
+    {% if template %}
+    <div class="editor-pane" id="pane-testmail" style="padding:20px;">
+      <div class="alert alert-info mb-16">
+        <span>ℹ</span>
+        <span>Stuur deze template als test naar een e-mailadres. Voornaam wordt <strong>Jan (Test)</strong> en het onderwerp krijgt het voorvoegsel <strong>[TEST]</strong>. Enkel jij ontvangt deze mail.</span>
+      </div>
+      <div style="max-width:480px;">
+        <div class="form-group">
+          <label class="form-label">Test e-mailadres</label>
+          <input type="email" id="test-email-input" placeholder="bv. jouw@email.be"
+                 value="{{ config.admin_email if config else '' }}"
+                 style="font-size:14px;">
+        </div>
+        <button type="button" onclick="sendTestMail()" id="btn-send-test" class="btn btn-primary">
+          📧 Verstuur testmail
+        </button>
+        <div id="testmail-result" style="margin-top:14px; display:none;"></div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 
   <div class="flex gap-8">
@@ -174,6 +196,36 @@ function switchTab(tab) {
   document.getElementById('pane-' + tab).classList.add('active');
 
   if (tab === 'preview') syncPreview();
+}
+
+function sendTestMail() {
+  const email = document.getElementById('test-email-input').value.trim();
+  const btn   = document.getElementById('btn-send-test');
+  const result = document.getElementById('testmail-result');
+  if (!email) { alert('Vul een e-mailadres in'); return; }
+  btn.disabled = true;
+  btn.textContent = '⏳ Verzenden...';
+  result.style.display = 'none';
+  const form = new FormData();
+  form.append('test_email', email);
+  fetch('{{ url_for("template_test_mail", id=template.id) if template else "#" }}', {
+    method: 'POST', body: form
+  })
+  .then(r => r.json())
+  .then(data => {
+    result.style.display = '';
+    result.className = data.ok ? 'alert alert-info' : 'alert alert-warning';
+    result.innerHTML = (data.ok ? '✓ ' : '✗ ') + data.msg;
+  })
+  .catch(() => {
+    result.style.display = '';
+    result.className = 'alert alert-warning';
+    result.textContent = 'Verbindingsfout';
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.textContent = '📧 Verstuur testmail';
+  });
 }
 
 function insertVar(v) {

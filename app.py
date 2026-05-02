@@ -6,8 +6,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from functools import wraps
+
 from flask import (Flask, render_template, request, redirect,
-                   url_for, flash, jsonify, send_file, Response)
+                   url_for, flash, jsonify, send_file, Response, session)
 from werkzeug.utils import secure_filename
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -178,6 +180,35 @@ def reload_schedule():
         trigger = CronTrigger(hour=int(h), minute=int(m))
     scheduler.add_job(lambda: do_run('send'), trigger, id='auto',
                       name='Auto verzending', replace_existing=True)
+
+
+# ─── Auth ────────────────────────────────────────────────────────────────────
+@app.before_request
+def require_login():
+    open_endpoints = {'login', 'logout', 'static'}
+    if request.endpoint not in open_endpoints and not session.get('logged_in'):
+        return redirect(url_for('login', next=request.path))
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    from db import get_app_setting
+    if session.get('logged_in'):
+        return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        stored = get_app_setting('app_password') or os.getenv('APP_PASSWORD', 'reviewflow2024')
+        if password == stored:
+            session['logged_in'] = True
+            return redirect(request.args.get('next') or url_for('dashboard'))
+        flash('Verkeerd wachtwoord', 'error')
+    return render_template('login.html')
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 
 # ─── Template filter ──────────────────────────────────────────────────────────
@@ -391,9 +422,13 @@ def settings():
                 'google_places_api_key':     request.form.get('google_places_api_key', '').strip(),
                 'google_place_id':           request.form.get('google_place_id', '').strip(),
             }
-            # Don't overwrite password if blank (keep existing)
+            # Don't overwrite smtp_password if blank
             if not fields['smtp_password']:
                 fields['smtp_password'] = get_app_setting('smtp_password', '')
+            # App password change
+            new_pw = request.form.get('app_password_new', '').strip()
+            if new_pw:
+                fields['app_password'] = new_pw
             save_app_settings(fields)
             # Also write SMTP settings back to .env file
             _update_env_file(fields)
@@ -496,6 +531,28 @@ def template_delete(id):
     ok, msg = delete_template(id)
     flash(msg, 'success' if ok else 'warning')
     return redirect(url_for('templates_list'))
+
+
+@app.route('/templates/<int:id>/test-mail', methods=['POST'])
+def template_test_mail(id):
+    from db import get_template
+    from mailer import get_smtp_config, _render_template, _send
+    test_email = request.form.get('test_email', '').strip()
+    if not test_email:
+        return jsonify({'ok': False, 'msg': 'Geen e-mailadres opgegeven'})
+    tpl = get_template(id)
+    if not tpl:
+        return jsonify({'ok': False, 'msg': 'Template niet gevonden'})
+    try:
+        smtp = get_smtp_config()
+        review_link = smtp.get('google_review_link') or '#'
+        html_body = _render_template(tpl['body_html'], 'Jan (Test)', review_link)
+        _send(test_email, 'Jan (Test)', review_link, smtp,
+              subject=f"[TEST] {tpl['onderwerp']}",
+              html_body=html_body)
+        return jsonify({'ok': True, 'msg': f'Testmail verstuurd naar {test_email}'})
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)})
 
 
 @app.route('/templates/<int:id>/activate', methods=['POST'])
