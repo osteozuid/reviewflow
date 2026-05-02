@@ -92,14 +92,20 @@
         </div>
         <hr style="border:none; border-top:1px solid var(--border); margin:16px 0;">
         <div class="form-group">
-          <label class="form-label">Nieuw app-wachtwoord</label>
-          <input type="password" name="app_password_new" placeholder="Laat leeg om ongewijzigd te laten"
+          <label class="form-label">Huidig wachtwoord</label>
+          <input type="password" name="app_password_current" placeholder="Voer uw huidig wachtwoord in"
+                 autocomplete="current-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nieuw wachtwoord</label>
+          <input type="password" name="app_password_new" placeholder="Min. 8 tekens"
                  autocomplete="new-password">
-          <div class="form-hint">Min. 6 tekens. Laat leeg om het huidige wachtwoord te bewaren.</div>
         </div>
         <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label">Herhaal nieuw wachtwoord</label>
-          <input type="password" name="app_password_confirm" placeholder="Herhaal het nieuwe wachtwoord">
+          <label class="form-label">Bevestig nieuw wachtwoord</label>
+          <input type="password" name="app_password_confirm" placeholder="Herhaal het nieuwe wachtwoord"
+                 autocomplete="new-password">
+          <div class="form-hint">Laat alle 3 velden leeg als u het wachtwoord niet wil wijzigen.</div>
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ from functools import wraps
 from flask import (Flask, render_template, request, redirect,
                    url_for, flash, jsonify, send_file, Response, session)
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -190,6 +191,13 @@ def require_login():
         return redirect(url_for('login', next=request.path))
 
 
+def _check_password(entered, stored):
+    """Verify password — supports both hashed (werkzeug) and plain text (legacy)."""
+    if stored.startswith('pbkdf2:') or stored.startswith('scrypt:'):
+        return check_password_hash(stored, entered)
+    return entered == stored
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     from db import get_app_setting
@@ -198,7 +206,7 @@ def login():
     if request.method == 'POST':
         password = request.form.get('password', '')
         stored = get_app_setting('app_password') or os.getenv('APP_PASSWORD', 'reviewflow2024')
-        if password == stored:
+        if _check_password(password, stored):
             session['logged_in'] = True
             return redirect(request.args.get('next') or url_for('dashboard'))
         flash('Verkeerd wachtwoord', 'error')
@@ -425,16 +433,21 @@ def settings():
             # Don't overwrite smtp_password if blank
             if not fields['smtp_password']:
                 fields['smtp_password'] = get_app_setting('smtp_password', '')
-            # App password change
+            # App password change — Google-stijl: huidig + nieuw 2x
+            current_pw = request.form.get('app_password_current', '').strip()
             new_pw     = request.form.get('app_password_new', '').strip()
             confirm_pw = request.form.get('app_password_confirm', '').strip()
-            if new_pw:
-                if len(new_pw) < 6:
-                    flash('Wachtwoord moet minstens 6 tekens zijn', 'error')
+            if new_pw or current_pw:
+                stored = get_app_setting('app_password') or os.getenv('APP_PASSWORD', 'reviewflow2024')
+                if not _check_password(current_pw, stored):
+                    flash('Huidig wachtwoord klopt niet', 'error')
+                elif len(new_pw) < 8:
+                    flash('Nieuw wachtwoord moet minstens 8 tekens zijn', 'error')
                 elif new_pw != confirm_pw:
-                    flash('Wachtwoorden komen niet overeen', 'error')
+                    flash('Nieuwe wachtwoorden komen niet overeen', 'error')
                 else:
-                    fields['app_password'] = new_pw
+                    fields['app_password'] = generate_password_hash(new_pw)
+                    flash('Wachtwoord gewijzigd ✓', 'success')
             save_app_settings(fields)
             # Also write SMTP settings back to .env file
             _update_env_file(fields)
