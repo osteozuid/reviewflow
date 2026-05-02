@@ -425,18 +425,16 @@ def settings():
             # Don't overwrite smtp_password if blank
             if not fields['smtp_password']:
                 fields['smtp_password'] = get_app_setting('smtp_password', '')
-            # App password change — verify current password first
+            # App password change
             new_pw     = request.form.get('app_password_new', '').strip()
             confirm_pw = request.form.get('app_password_confirm', '').strip()
             if new_pw:
-                current = get_app_setting('app_password') or os.getenv('APP_PASSWORD', 'reviewflow2024')
-                if confirm_pw != current:
-                    flash('Huidig wachtwoord klopt niet — wachtwoord NIET gewijzigd', 'error')
-                elif len(new_pw) < 6:
-                    flash('Nieuw wachtwoord moet minstens 6 tekens zijn', 'error')
+                if len(new_pw) < 6:
+                    flash('Wachtwoord moet minstens 6 tekens zijn', 'error')
+                elif new_pw != confirm_pw:
+                    flash('Wachtwoorden komen niet overeen', 'error')
                 else:
                     fields['app_password'] = new_pw
-                    flash('Wachtwoord gewijzigd', 'success')
             save_app_settings(fields)
             # Also write SMTP settings back to .env file
             _update_env_file(fields)
