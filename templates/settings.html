@@ -79,7 +79,7 @@
     <div class="section" style="margin:0;">
       <div class="sec-head">🔒 Veiligheid</div>
       <div style="padding:20px;">
-        <div class="form-group" style="margin-bottom:0;">
+        <div class="form-group">
           <label class="form-label" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
             <label class="toggle">
               <input type="checkbox" name="send_geblokkeerd"
@@ -89,6 +89,17 @@
             Versturen geblokkeerd (testmodus)
           </label>
           <div class="form-hint">Als ingeschakeld: "Versturen" werkt niet — alleen dry-run en testmail.</div>
+        </div>
+        <hr style="border:none; border-top:1px solid var(--border); margin:16px 0;">
+        <div class="form-group">
+          <label class="form-label">Nieuw app-wachtwoord</label>
+          <input type="password" name="app_password_new" placeholder="Laat leeg om ongewijzigd te laten"
+                 autocomplete="new-password">
+          <div class="form-hint">Verander het wachtwoord waarmee u inlogt op deze app. Min. 8 tekens aanbevolen.</div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Huidig wachtwoord bevestigen</label>
+          <input type="password" name="app_password_confirm" placeholder="Huidig wachtwoord ter bevestiging">
         </div>
       </div>
     </div>
