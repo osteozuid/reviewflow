@@ -23,6 +23,7 @@ def _fetch_place_details(fields='reviews'):
         'place_id': place_id,
         'fields': fields,
         'language': 'nl',
+        'reviews_sort': 'newest',
         'key': api_key,
     }
     response = requests.get(url, params=params, timeout=10)
