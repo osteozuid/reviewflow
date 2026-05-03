@@ -91,6 +91,11 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS review_snapshots (
+    date TEXT PRIMARY KEY,
+    total INTEGER
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_review_log_email ON review_log(email);
 CREATE INDEX IF NOT EXISTS idx_blocked_email ON blocked(email);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reviewed_names_naam ON reviewed_names(naam);
@@ -108,6 +113,22 @@ def init_db():
     with get_connection() as conn:
         conn.executescript(SCHEMA)
     seed_preset_templates()
+
+
+def record_review_snapshot(total):
+    from datetime import date
+    with get_connection() as conn:
+        conn.execute('INSERT OR REPLACE INTO review_snapshots (date, total) VALUES (?, ?)',
+                     (date.today().isoformat(), total))
+
+def get_review_growth():
+    with get_connection() as conn:
+        rows = conn.execute('SELECT date, total FROM review_snapshots ORDER BY date').fetchall()
+    if not rows:
+        return None
+    first, latest = rows[0], rows[-1]
+    return {'first_date': first['date'], 'first_total': first['total'],
+            'latest_total': latest['total'], 'growth': latest['total'] - first['total']}
 
 
 def get_already_sent():

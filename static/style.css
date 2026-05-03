@@ -182,6 +182,7 @@ body {
 .card-icon.i-green  { background: rgba(16,185,129,.12); }
 .card-icon.i-warn   { background: rgba(245,158,11,.12); }
 .card-icon.i-purple { background: rgba(139,92,246,.12); }
+.card-icon.i-teal   { background: rgba(14,165,233,.12); }
 
 .card-label { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; }
 .card-val   { font-size: 30px; font-weight: 700; color: var(--text-hi); line-height: 1; margin-bottom: 4px; }

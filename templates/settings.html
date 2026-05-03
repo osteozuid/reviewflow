@@ -181,21 +181,5 @@
   {% endif %}
 </div>
 
-<!-- Logo upload -->
-<div class="section">
-  <div class="sec-head">🖼 Logo</div>
-  <form method="post" action="{{ url_for('upload_logo') }}" enctype="multipart/form-data"
-        style="padding:16px 20px;">
-    <div class="form-group" style="margin-bottom:0;">
-      <label class="form-label">Logo uploaden (PNG, JPG, SVG)</label>
-      <div class="flex gap-8 align-center">
-        <input type="file" name="logo" accept=".png,.jpg,.jpeg,.svg,.gif"
-               style="max-width:300px; padding:4px 8px;">
-        <button type="submit" class="btn btn-ghost">Uploaden</button>
-      </div>
-      <div class="form-hint">Het logo kan worden gebruikt in e-mailtemplates via een afbeeldingstag.</div>
-    </div>
-  </form>
-</div>
 
 {% endblock %}

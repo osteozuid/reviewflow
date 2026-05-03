@@ -32,6 +32,14 @@
       {% if schedule and schedule.actief %}{{ schedule.modus }}{% else %}niet gepland{% endif %}
     </div>
   </div>
+  {% if review_growth %}
+  <div class="card c-teal">
+    <div class="card-icon i-teal">⭐</div>
+    <div class="card-label">Nieuwe Google reviews</div>
+    <div class="card-val">+{{ review_growth.growth }}</div>
+    <div class="card-sub">{{ review_growth.first_total }} → {{ review_growth.latest_total }} reviews (sinds {{ review_growth.first_date }})</div>
+  </div>
+  {% endif %}
 </div>
 
 <div class="flex gap-8 mb-24">

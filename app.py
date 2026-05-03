@@ -253,11 +253,14 @@ def dashboard():
     cfg = get_schedule_config()
     job = scheduler.get_job('auto')
     next_run = job.next_run_time.strftime('%a %d/%m %H:%M') if job else None
+    from db import get_review_growth
+    review_growth = get_review_growth()
 
     return render_template('dashboard.html',
         total=total, this_month=this_month, last_run=last_run,
         recent=recent, reviewed_count=reviewed_count,
         input_count=input_count, next_run=next_run, schedule=cfg,
+        review_growth=review_growth,
         page='dashboard')
 
 
@@ -689,6 +692,9 @@ def google_reviews_page():
                 reviews        = result.get('reviews', [])
                 overall_rating = result.get('rating')
                 total_ratings  = result.get('user_ratings_total')
+                if total_ratings:
+                    from db import record_review_snapshot
+                    record_review_snapshot(total_ratings)
             else:
                 error = f"Google API fout: {data.get('status')} — {data.get('error_message', '')}"
         except Exception as e:
