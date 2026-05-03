@@ -39,9 +39,11 @@
       <div class="rating-count">{{ total_ratings }} beoordelingen in totaal</div>
     </div>
     <div style="margin-left:auto;">
-      <a href="https://g.page/r/CdMCyaACSj-JEBM/review" target="_blank" class="btn btn-primary">
+      {% if maps_url %}
+      <a href="{{ maps_url }}" target="_blank" class="btn btn-primary">
         ★ Alle reviews bekijken
       </a>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -89,7 +91,8 @@
 <div class="alert alert-info mt-12">
   <span>ℹ</span>
   <span>Google Places API geeft maximaal 5 recente reviews terug. Voor het volledige overzicht,
-  <a href="https://g.page/r/CdMCyaACSj-JEBM/review" target="_blank" style="color:var(--teal);">open Google Maps</a>.</span>
+  {% if maps_url %}<a href="{{ maps_url }}" target="_blank" style="color:var(--teal);">open Google Maps</a>{% else %}open Google Maps{% endif %}
+  → klik op <strong>Reviews</strong> → sorteer op <strong>Nieuwste</strong>.</span>
 </div>
 
 {% elif not error %}

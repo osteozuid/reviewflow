@@ -710,11 +710,13 @@ def google_reviews_page():
         except Exception as e:
             error = str(e)
 
+    maps_url = f'https://www.google.com/maps/place/?q=place_id:{place_id}' if place_id else ''
     return render_template('google_reviews.html',
                            reviews=reviews,
                            overall_rating=overall_rating,
                            total_ratings=total_ratings,
                            error=error,
+                           maps_url=maps_url,
                            page='reviews')
 
 
