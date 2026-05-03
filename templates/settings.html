@@ -76,6 +76,22 @@
       </div>
     </div>
 
+    <div class="section">
+      <div class="sec-head">🎨 Branding</div>
+      <div style="padding:20px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Logo URL</label>
+          <input type="url" name="logo_url" class="w-full"
+                 value="{{ cfg.get('logo_url','') }}"
+                 placeholder="https://osteozuid.be/logo.png">
+          <div class="form-hint">Gebruik <code>{{logo}}</code> in e-mailsjablonen om het logo in te voegen. Gebruik een directe URL naar een afbeelding (PNG, JPG).</div>
+          {% if cfg.get('logo_url') %}
+          <div style="margin-top:10px;"><img src="{{ cfg.logo_url }}" alt="Logo preview" style="max-height:60px; border:1px solid var(--border); border-radius:4px; padding:4px;"></div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
     <div class="section" style="margin:0;">
       <div class="sec-head">🔒 Veiligheid</div>
       <div style="padding:20px;">

@@ -22,6 +22,7 @@ def get_smtp_config():
             'from_name':          db.get_app_setting('from_name') or os.getenv('FROM_NAME', 'Osteozuid'),
             'admin_email':        db.get_app_setting('admin_email') or os.getenv('ADMIN_EMAIL', ''),
             'google_review_link': db.get_app_setting('google_review_link') or os.getenv('GOOGLE_REVIEW_LINK', ''),
+            'logo_url':           db.get_app_setting('logo_url') or '',
         }
     except Exception:
         config = {
@@ -33,6 +34,7 @@ def get_smtp_config():
             'from_name':          os.getenv('FROM_NAME', 'Osteozuid'),
             'admin_email':        os.getenv('ADMIN_EMAIL', ''),
             'google_review_link': os.getenv('GOOGLE_REVIEW_LINK', ''),
+            'logo_url':           '',
         }
     missing = [k for k in ('user', 'password', 'from_email') if not config[k]]
     if missing:
@@ -76,10 +78,11 @@ def build_body_html(voornaam, google_review_link):
 </html>"""
 
 
-def _render_template(body_html, voornaam, google_review_link):
-    """Replace {{voornaam}} and {{google_link}} placeholders in template HTML."""
+def _render_template(body_html, voornaam, google_review_link, logo_url=''):
     rendered = body_html.replace('{{voornaam}}', voornaam)
     rendered = rendered.replace('{{google_link}}', google_review_link)
+    logo_html = f'<img src="{logo_url}" alt="Logo" style="max-height:80px;display:block;margin-bottom:16px;">' if logo_url else ''
+    rendered = rendered.replace('{{logo}}', logo_html)
     return rendered
 
 
@@ -112,7 +115,7 @@ def send_review_request(patient, smtp_config, template=None):
 
     if template:
         subject = template['onderwerp']
-        html_body = _render_template(template['body_html'], voornaam, review_link)
+        html_body = _render_template(template['body_html'], voornaam, review_link, smtp_config.get('logo_url', ''))
         _send(patient['email'], voornaam, review_link, smtp_config,
               subject=subject, html_body=html_body)
     else:

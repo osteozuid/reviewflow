@@ -429,6 +429,7 @@ def settings():
                 'myorganizer_tenant_id':     request.form.get('myorganizer_tenant_id', '').strip(),
                 'google_places_api_key':     request.form.get('google_places_api_key', '').strip(),
                 'google_place_id':           request.form.get('google_place_id', '').strip(),
+                'logo_url':                  request.form.get('logo_url', '').strip(),
             }
             # Don't overwrite smtp_password if blank
             if not fields['smtp_password']:
@@ -472,6 +473,7 @@ def settings():
         'myorganizer_tenant_id':     '',
         'google_places_api_key':     '',
         'google_place_id':           os.getenv('GOOGLE_PLACE_ID', ''),
+        'logo_url':                  '',
     }
     cfg = {k: db_settings.get(k) or env_defaults.get(k, '') for k in env_defaults}
     return render_template('settings.html', reviewed=reviewed, cfg=cfg, page='settings')
@@ -515,7 +517,10 @@ def templates_list():
 
 @app.route('/templates/new')
 def template_new():
-    return render_template('template_editor.html', template=None, page='templates')
+    from db import get_app_setting
+    return render_template('template_editor.html', template=None, page='templates',
+                           logo_url=get_app_setting('logo_url') or '',
+                           admin_email=get_app_setting('admin_email') or '')
 
 
 @app.route('/templates/save', methods=['POST'])
@@ -541,7 +546,10 @@ def template_edit(id):
     if not tpl:
         flash('Template niet gevonden', 'warning')
         return redirect(url_for('templates_list'))
-    return render_template('template_editor.html', template=tpl, page='templates')
+    from db import get_app_setting
+    return render_template('template_editor.html', template=tpl, page='templates',
+                           logo_url=get_app_setting('logo_url') or '',
+                           admin_email=get_app_setting('admin_email') or '')
 
 
 @app.route('/templates/<int:id>/delete', methods=['POST'])
@@ -565,7 +573,7 @@ def template_test_mail(id):
     try:
         smtp = get_smtp_config()
         review_link = smtp.get('google_review_link') or '#'
-        html_body = _render_template(tpl['body_html'], 'Jan (Test)', review_link)
+        html_body = _render_template(tpl['body_html'], 'Jan (Test)', review_link, smtp.get('logo_url', ''))
         _send(test_email, 'Jan (Test)', review_link, smtp,
               subject=f"[TEST] {tpl['onderwerp']}",
               html_body=html_body)
