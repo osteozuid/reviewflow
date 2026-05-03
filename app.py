@@ -444,9 +444,10 @@ def settings():
                 'myorganizer_tenant_id':     request.form.get('myorganizer_tenant_id', '').strip(),
                 'google_places_api_key':     request.form.get('google_places_api_key', '').strip(),
                 'google_place_id':           request.form.get('google_place_id', '').strip(),
-                'logo_url':                  request.form.get('logo_url', '').strip(),
                 'review_baseline':           request.form.get('review_baseline', '').strip(),
             }
+            # logo_url is managed separately via /upload/logo — preserve existing value
+            fields['logo_url'] = get_app_setting('logo_url', '') or ''
             # Don't overwrite smtp_password if blank
             if not fields['smtp_password']:
                 fields['smtp_password'] = get_app_setting('smtp_password', '')
