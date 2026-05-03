@@ -254,7 +254,8 @@ def dashboard():
     job = scheduler.get_job('auto')
     next_run = job.next_run_time.strftime('%a %d/%m %H:%M') if job else None
     from db import get_review_growth
-    review_growth = get_review_growth()
+    review_baseline = get_app_setting('review_baseline') or None
+    review_growth = get_review_growth(baseline=review_baseline)
 
     return render_template('dashboard.html',
         total=total, this_month=this_month, last_run=last_run,
@@ -444,6 +445,7 @@ def settings():
                 'google_places_api_key':     request.form.get('google_places_api_key', '').strip(),
                 'google_place_id':           request.form.get('google_place_id', '').strip(),
                 'logo_url':                  request.form.get('logo_url', '').strip(),
+                'review_baseline':           request.form.get('review_baseline', '').strip(),
             }
             # Don't overwrite smtp_password if blank
             if not fields['smtp_password']:
@@ -488,6 +490,7 @@ def settings():
         'google_places_api_key':     '',
         'google_place_id':           os.getenv('GOOGLE_PLACE_ID', ''),
         'logo_url':                  '',
+        'review_baseline':           '',
     }
     cfg = {k: db_settings.get(k) or env_defaults.get(k, '') for k in env_defaults}
     return render_template('settings.html', reviewed=reviewed, cfg=cfg, page='settings')
@@ -700,7 +703,7 @@ def google_reviews_page():
         except Exception as e:
             error = str(e)
 
-    maps_url = f'https://www.google.com/maps/place/?q=place_id:{place_id}' if place_id else ''
+    maps_url = f'https://www.google.com/maps/search/?api=1&query_place_id={place_id}&query=reviews' if place_id else ''
     return render_template('google_reviews.html',
                            reviews=reviews,
                            overall_rating=overall_rating,

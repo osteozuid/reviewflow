@@ -121,14 +121,20 @@ def record_review_snapshot(total):
         conn.execute('INSERT OR REPLACE INTO review_snapshots (date, total) VALUES (?, ?)',
                      (date.today().isoformat(), total))
 
-def get_review_growth():
+def get_review_growth(baseline=None):
     with get_connection() as conn:
         rows = conn.execute('SELECT date, total FROM review_snapshots ORDER BY date').fetchall()
     if not rows:
         return None
-    first, latest = rows[0], rows[-1]
-    return {'first_date': first['date'], 'first_total': first['total'],
-            'latest_total': latest['total'], 'growth': latest['total'] - first['total']}
+    latest = rows[-1]
+    if baseline:
+        first_total = int(baseline)
+        first_date = 'startwaarde'
+    else:
+        first_total = rows[0]['total']
+        first_date = rows[0]['date']
+    return {'first_date': first_date, 'first_total': first_total,
+            'latest_total': latest['total'], 'growth': latest['total'] - first_total}
 
 
 def get_already_sent():

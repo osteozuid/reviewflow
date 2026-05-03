@@ -98,6 +98,12 @@
           </div>
           <div class="form-hint" style="margin-top:6px;">PNG, JPG of SVG. Gebruik <code>{{logo}}</code> in e-mailsjablonen om het logo in te voegen.</div>
         </form>
+        <div class="form-group" style="margin-top:16px; margin-bottom:0;">
+          <label class="form-label">Startaantal reviews (voor campagne)</label>
+          <input type="number" name="review_baseline" style="max-width:120px;"
+                 value="{{ cfg.get('review_baseline','') }}" placeholder="bv. 115">
+          <div class="form-hint">Stel het aantal reviews in vóór de campagne startte. Het dashboard toont dan de echte groei.</div>
+        </div>
       </div>
     </div>
 
