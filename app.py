@@ -253,7 +253,7 @@ def dashboard():
     cfg = get_schedule_config()
     job = scheduler.get_job('auto')
     next_run = job.next_run_time.strftime('%a %d/%m %H:%M') if job else None
-    from db import get_review_growth
+    from db import get_review_growth, get_app_setting
     review_baseline = get_app_setting('review_baseline') or None
     review_growth = get_review_growth(baseline=review_baseline)
 
