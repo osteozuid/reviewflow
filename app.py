@@ -253,10 +253,17 @@ def dashboard():
     cfg = get_schedule_config()
     job = scheduler.get_job('auto')
     next_run = job.next_run_time.strftime('%a %d/%m %H:%M') if job else None
-    from db import get_review_growth, get_app_setting, get_review_snapshots
+    from db import get_review_growth, get_app_setting, get_review_snapshots, get_connection
     review_baseline = get_app_setting('review_baseline') or None
     review_growth = get_review_growth(baseline=review_baseline)
     review_snapshots = get_review_snapshots()
+    # Prepend a synthetic start point at the baseline value on the date of the first sent mail
+    if review_baseline:
+        with get_connection() as _conn:
+            _first = _conn.execute("SELECT DATE(MIN(sent_at)) as d FROM review_log").fetchone()
+        start_date = _first['d'] if _first and _first['d'] else None
+        if start_date and (not review_snapshots or review_snapshots[0]['date'] > start_date):
+            review_snapshots = [{'date': start_date, 'total': int(review_baseline)}] + review_snapshots
 
     return render_template('dashboard.html',
         total=total, this_month=this_month, last_run=last_run,
