@@ -8,6 +8,14 @@
   .ql-container.ql-snow { border:1px solid var(--border); border-radius:0 0 var(--r) var(--r); font-family:Calibri,Arial,sans-serif; font-size:14px; }
   .ql-editor { min-height:360px; line-height:1.7; }
   .ql-editor p { margin:0 0 12px; }
+  .ql-insertname, .ql-insertlink, .ql-insertlogo {
+    font-size:11px !important; font-weight:600 !important;
+    padding:2px 7px !important; border-radius:3px !important;
+    color: var(--accent) !important;
+  }
+  .ql-insertname::after  { content: '{ Naam }'; }
+  .ql-insertlink::after  { content: '{ Review ↗ }'; }
+  .ql-insertlogo::after  { content: '{ Logo }'; }
 </style>
 
 <div class="flex gap-12 align-center mb-24">
@@ -18,52 +26,19 @@
 <form method="post" action="{{ url_for('template_save') }}" id="tpl-form">
   {% if template %}<input type="hidden" name="id" value="{{ template.id }}">{% endif %}
 
-  <div class="grid-2 mb-24">
-    <div class="section" style="margin:0;">
-      <div class="sec-head">Basisinstellingen</div>
-      <div style="padding:20px;">
-        <div class="form-group">
-          <label class="form-label">Naam template</label>
-          <input type="text" name="naam" value="{{ template.naam if template else '' }}"
-                 placeholder="bijv. Vriendelijk, Professioneel..." required>
-        </div>
-        <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label">E-mail onderwerp</label>
-          <input type="text" name="onderwerp" class="w-full"
-                 value="{{ template.onderwerp if template else '' }}"
-                 placeholder="bijv. Uw ervaring bij Osteozuid" required>
-        </div>
+  <div class="section mb-24" style="max-width:640px;">
+    <div class="sec-head">Basisinstellingen</div>
+    <div style="padding:20px;">
+      <div class="form-group">
+        <label class="form-label">Naam template</label>
+        <input type="text" name="naam" value="{{ template.naam if template else '' }}"
+               placeholder="bijv. Vriendelijk, Professioneel..." required>
       </div>
-    </div>
-
-    <div class="section" style="margin:0;">
-      <div class="sec-head">Variabelen</div>
-      <div style="padding:20px; font-size:13px; color:var(--text-dim);">
-        <p style="margin-bottom:12px;">Klik om in te voegen op de cursorpositie:</p>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <button type="button" onclick="insertVar('{{voornaam}}')" class="btn btn-ghost btn-sm" style="justify-content:flex-start;">
-            <code style="color:var(--accent);">{{voornaam}}</code>
-            <span style="margin-left:8px; color:var(--text-dim);">— Voornaam patiënt</span>
-          </button>
-          <button type="button" onclick="insertVar('{{google_link}}')" class="btn btn-ghost btn-sm" style="justify-content:flex-start;">
-            <code style="color:var(--accent);">{{google_link}}</code>
-            <span style="margin-left:8px; color:var(--text-dim);">— Google Review link</span>
-          </button>
-          <button type="button" onclick="insertVar('{{logo}}')" class="btn btn-ghost btn-sm" style="justify-content:flex-start;">
-            <code style="color:var(--accent);">{{logo}}</code>
-            <span style="margin-left:8px; color:var(--text-dim);">— Logo praktijk</span>
-          </button>
-        </div>
-        {% if logo_url %}
-        <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text-dim);">
-          Huidig logo:<br>
-          <img src="{{ logo_url }}" alt="Logo" style="max-height:50px; margin-top:6px; border-radius:4px;">
-        </div>
-        {% else %}
-        <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text-dim);">
-          Geen logo ingesteld. Stel een logo in via <a href="{{ url_for('settings') }}">Instellingen → Branding</a>.
-        </div>
-        {% endif %}
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">E-mail onderwerp</label>
+        <input type="text" name="onderwerp" class="w-full"
+               value="{{ template.onderwerp if template else '' }}"
+               placeholder="bijv. Uw ervaring bij Osteozuid" required>
       </div>
     </div>
   </div>
@@ -80,7 +55,7 @@
     <div class="editor-pane active" id="pane-visual" style="padding:20px;">
       <div class="alert alert-info mb-16">
         <span>ℹ</span>
-        <span>Gebruik de opmaakbalk voor vetgedrukt, cursief, lettergrootte, kleur, enz. Gebruik de <strong>Variabelen</strong> rechts om namen en links in te voegen.</span>
+        <span>Gebruik de opmaakbalk voor opmaak. De oranje knoppen <strong>{ Naam }</strong>, <strong>{ Review ↗ }</strong> en <strong>{ Logo }</strong> voegen automatisch de juiste gegevens in.</span>
       </div>
       <div id="quill-editor"></div>
     </div>
@@ -89,7 +64,7 @@
     <div class="editor-pane" id="pane-html" style="padding:20px;">
       <div class="alert alert-info mb-16">
         <span>ℹ</span>
-        <span>Volledige HTML e-mail. Gebruik <code>{{voornaam}}</code> en <code>{{google_link}}</code> als variabelen.</span>
+        <span>Volledige HTML. Variabelen: <code>{{voornaam}}</code>, <code>{{google_link}}</code>, <code>{{logo}}</code>.</span>
       </div>
       <textarea id="html-editor" name="body_html" class="w-full"
                 style="height:420px; font-family:Consolas,monospace; font-size:12px; line-height:1.6;"
@@ -110,12 +85,13 @@
                 sandbox="allow-same-origin"></iframe>
       </div>
     </div>
+
     <!-- TESTMAIL -->
     {% if template %}
     <div class="editor-pane" id="pane-testmail" style="padding:20px;">
       <div class="alert alert-info mb-16">
         <span>ℹ</span>
-        <span>Stuur deze template als test naar een e-mailadres. Voornaam wordt <strong>Jan (Test)</strong> en het onderwerp krijgt het voorvoegsel <strong>[TEST]</strong>. Enkel jij ontvangt deze mail.</span>
+        <span>Stuur deze template als test. Voornaam wordt <strong>Jan (Test)</strong> en het onderwerp krijgt het voorvoegsel <strong>[TEST]</strong>.</span>
       </div>
       <div style="max-width:480px;">
         <div class="form-group">
@@ -245,17 +221,10 @@ function sendTestMail() {
   });
 }
 
-function insertVar(v) {
-  if (activeTab === 'visual') {
-    const range = quill.getSelection(true);
-    quill.insertText(range ? range.index : quill.getLength(), v, 'user');
-  } else {
-    const ed = document.getElementById('html-editor');
-    const s = ed.selectionStart;
-    ed.value = ed.value.slice(0, s) + v + ed.value.slice(ed.selectionEnd);
-    ed.selectionStart = ed.selectionEnd = s + v.length;
-    ed.focus();
-  }
+function insertAtCursor(v) {
+  const range = quill.getSelection(true);
+  quill.insertText(range ? range.index : quill.getLength(), v, 'user');
+  quill.focus();
 }
 
 document.getElementById('tpl-form').addEventListener('submit', function() {
@@ -266,16 +235,24 @@ window.addEventListener('DOMContentLoaded', function() {
   quill = new Quill('#quill-editor', {
     theme: 'snow',
     modules: {
-      toolbar: [
-        [{ header: [1, 2, 3, false] }],
-        [{ font: [] }, { size: ['small', false, 'large', 'huge'] }],
-        ['bold', 'italic', 'underline', 'strike'],
-        [{ color: [] }, { background: [] }],
-        [{ align: [] }],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        ['link'],
-        ['clean']
-      ]
+      toolbar: {
+        container: [
+          [{ header: [1, 2, 3, false] }],
+          [{ font: [] }, { size: ['small', false, 'large', 'huge'] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ color: [] }, { background: [] }],
+          [{ align: [] }],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          ['link'],
+          ['clean'],
+          ['insertname', 'insertlink', 'insertlogo']
+        ],
+        handlers: {
+          insertname:  function() { insertAtCursor('{{voornaam}}'); },
+          insertlink:  function() { insertAtCursor('{{google_link}}'); },
+          insertlogo:  function() { insertAtCursor('{{logo}}'); }
+        }
+      }
     },
     placeholder: 'Schrijf uw e-mail hier...'
   });
