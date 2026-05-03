@@ -79,26 +79,7 @@
     <div class="section">
       <div class="sec-head">🎨 Branding</div>
       <div style="padding:20px;">
-        <label class="form-label">Logo</label>
-        {% if cfg.get('logo_url') %}
-        <div style="margin-bottom:14px; display:flex; align-items:center; gap:16px;">
-          <img src="{{ cfg.logo_url }}" alt="Logo" style="max-height:64px; border:1px solid var(--border); border-radius:6px; padding:6px; background:#fff;">
-          <form method="post" action="{{ url_for('upload_logo') }}" style="display:inline;">
-            <button type="submit" name="action" value="delete_logo" class="btn btn-ghost btn-sm" style="color:#c0392b;">
-              ✕ Verwijder logo
-            </button>
-          </form>
-        </div>
-        {% endif %}
-        <form method="post" action="{{ url_for('upload_logo') }}" enctype="multipart/form-data">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <input type="file" name="logo" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
-                   style="font-size:13px;">
-            <button type="submit" class="btn btn-primary btn-sm">⬆ Upload Logo</button>
-          </div>
-          <div class="form-hint" style="margin-top:6px;">PNG, JPG of SVG. Gebruik <code>{{logo}}</code> in e-mailsjablonen om het logo in te voegen.</div>
-        </form>
-        <div class="form-group" style="margin-top:16px; margin-bottom:0;">
+        <div class="form-group" style="margin-bottom:0;">
           <label class="form-label">Startaantal reviews (voor campagne)</label>
           <input type="number" name="review_baseline" style="max-width:120px;"
                  value="{{ cfg.get('review_baseline','') }}" placeholder="bv. 115">
@@ -149,6 +130,28 @@
 </div>
 
 </form>
+
+<!-- Logo -->
+<div class="section" style="margin-bottom:20px;">
+  <div class="sec-head">🖼 Logo</div>
+  <div style="padding:20px;">
+    {% if cfg.get('logo_url') %}
+    <div style="margin-bottom:14px; display:flex; align-items:center; gap:16px;">
+      <img src="{{ cfg.logo_url }}" alt="Logo" style="max-height:64px; border:1px solid var(--border); border-radius:6px; padding:6px; background:#fff;">
+      <form method="post" action="{{ url_for('upload_logo') }}">
+        <button type="submit" name="action" value="delete_logo" class="btn btn-ghost btn-sm" style="color:#c0392b;">✕ Verwijder logo</button>
+      </form>
+    </div>
+    {% endif %}
+    <form method="post" action="{{ url_for('upload_logo') }}" enctype="multipart/form-data">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <input type="file" name="logo" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" style="font-size:13px;">
+        <button type="submit" class="btn btn-primary btn-sm">⬆ Upload Logo</button>
+      </div>
+      <div class="form-hint" style="margin-top:6px;">PNG, JPG of SVG. Gebruik <code>{{logo}}</code> in e-mailsjablonen om het logo in te voegen.</div>
+    </form>
+  </div>
+</div>
 
 <!-- Al gereviewd -->
 <div class="section">
