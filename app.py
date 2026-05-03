@@ -516,7 +516,6 @@ def templates_list():
 
 
 @app.route('/settings/upload-logo', methods=['POST'])
-@login_required
 def upload_logo():
     from db import save_app_settings, get_app_setting
     if request.form.get('action') == 'delete_logo':
