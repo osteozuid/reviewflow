@@ -301,17 +301,28 @@ def delete_file(filename):
 
 @app.route('/upload/logo', methods=['POST'])
 def upload_logo():
+    from db import save_app_settings, get_app_setting
+    if request.form.get('action') == 'delete_logo':
+        logo_url = get_app_setting('logo_url', '')
+        if logo_url:
+            logo_path = ROOT / logo_url.lstrip('/')
+            if logo_path.exists():
+                logo_path.unlink()
+        save_app_settings({'logo_url': ''})
+        flash('Logo verwijderd', 'success')
+        return redirect(url_for('settings'))
     f = request.files.get('logo')
-    if f and f.filename:
-        ext = Path(f.filename).suffix.lower()
-        if ext in {'.png', '.jpg', '.jpeg', '.svg', '.gif'}:
-            UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-            f.save(UPLOAD_DIR / f'logo{ext}')
-            flash('Logo geüpload', 'success')
-        else:
-            flash('Ongeldig bestandstype voor logo', 'warning')
-    else:
+    if not f or not f.filename:
         flash('Geen bestand geselecteerd', 'warning')
+        return redirect(url_for('settings'))
+    ext = Path(f.filename).suffix.lower().lstrip('.')
+    if ext not in {'png', 'jpg', 'jpeg', 'svg', 'gif', 'webp'}:
+        flash('Ongeldig bestandstype — gebruik PNG, JPG of SVG', 'warning')
+        return redirect(url_for('settings'))
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    f.save(UPLOAD_DIR / f'logo.{ext}')
+    save_app_settings({'logo_url': f'/static/uploads/logo.{ext}'})
+    flash('Logo opgeslagen ✓', 'success')
     return redirect(url_for('settings'))
 
 
@@ -515,32 +526,6 @@ def templates_list():
     return render_template('templates_list.html', templates=templates, page='templates')
 
 
-@app.route('/settings/upload-logo', methods=['POST'])
-def upload_logo():
-    from db import save_app_settings, get_app_setting
-    if request.form.get('action') == 'delete_logo':
-        logo_url = get_app_setting('logo_url', '')
-        if logo_url and logo_url.startswith('/static/uploads/'):
-            logo_path = ROOT / logo_url.lstrip('/')
-            if logo_path.exists():
-                logo_path.unlink()
-        save_app_settings({'logo_url': ''})
-        flash('Logo verwijderd', 'success')
-        return redirect(url_for('settings'))
-    file = request.files.get('logo')
-    if not file or file.filename == '':
-        flash('Geen bestand geselecteerd', 'error')
-        return redirect(url_for('settings'))
-    ext = file.filename.rsplit('.', 1)[-1].lower()
-    if ext not in ('png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'):
-        flash('Ongeldig bestandstype — gebruik PNG, JPG of SVG', 'error')
-        return redirect(url_for('settings'))
-    upload_dir = ROOT / 'static' / 'uploads'
-    upload_dir.mkdir(exist_ok=True)
-    file.save(upload_dir / f'logo.{ext}')
-    save_app_settings({'logo_url': f'/static/uploads/logo.{ext}'})
-    flash('Logo opgeslagen ✓', 'success')
-    return redirect(url_for('settings'))
 
 
 @app.route('/templates/new')
