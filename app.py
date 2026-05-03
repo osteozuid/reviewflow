@@ -253,15 +253,18 @@ def dashboard():
     cfg = get_schedule_config()
     job = scheduler.get_job('auto')
     next_run = job.next_run_time.strftime('%a %d/%m %H:%M') if job else None
-    from db import get_review_growth, get_app_setting
+    from db import get_review_growth, get_app_setting, get_review_snapshots
     review_baseline = get_app_setting('review_baseline') or None
     review_growth = get_review_growth(baseline=review_baseline)
+    review_snapshots = get_review_snapshots()
 
     return render_template('dashboard.html',
         total=total, this_month=this_month, last_run=last_run,
         recent=recent, reviewed_count=reviewed_count,
         input_count=input_count, next_run=next_run, schedule=cfg,
         review_growth=review_growth,
+        review_snapshots=review_snapshots,
+        review_baseline=review_baseline,
         page='dashboard')
 
 

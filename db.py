@@ -121,6 +121,11 @@ def record_review_snapshot(total):
         conn.execute('INSERT OR REPLACE INTO review_snapshots (date, total) VALUES (?, ?)',
                      (date.today().isoformat(), total))
 
+def get_review_snapshots():
+    with get_connection() as conn:
+        rows = conn.execute('SELECT date, total FROM review_snapshots ORDER BY date').fetchall()
+    return [{'date': r['date'], 'total': r['total']} for r in rows]
+
 def get_review_growth(baseline=None):
     with get_connection() as conn:
         rows = conn.execute('SELECT date, total FROM review_snapshots ORDER BY date').fetchall()

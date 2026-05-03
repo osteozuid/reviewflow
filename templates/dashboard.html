@@ -82,6 +82,15 @@
 
 </div>
 
+{% if review_snapshots %}
+<div class="section" style="margin-bottom:24px;">
+  <div class="sec-head">⭐ Google reviews — groei</div>
+  <div style="padding:20px;">
+    <canvas id="reviewChart" style="max-height:260px;"></canvas>
+  </div>
+</div>
+{% endif %}
+
 <div class="section">
   <div class="sec-head">
     <span>Recente activiteit</span>
@@ -115,4 +124,63 @@
   {% endif %}
 </div>
 
+{% endblock %}
+{% block scripts %}
+{% if review_snapshots %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  const labels = {{ review_snapshots | map(attribute='date') | list | tojson }};
+  const values = {{ review_snapshots | map(attribute='total') | list | tojson }};
+  const baseline = {{ review_baseline | tojson }};
+
+  const datasets = [{
+    label: 'Google reviews',
+    data: values,
+    borderColor: '#f28c00',
+    backgroundColor: 'rgba(242,140,0,0.08)',
+    borderWidth: 2.5,
+    pointRadius: 4,
+    pointBackgroundColor: '#f28c00',
+    fill: true,
+    tension: 0.3
+  }];
+
+  if (baseline) {
+    datasets.push({
+      label: 'Startwaarde (' + baseline + ')',
+      data: labels.map(() => parseInt(baseline)),
+      borderColor: '#cbd5e1',
+      borderWidth: 1.5,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      fill: false,
+      tension: 0
+    });
+  }
+
+  new Chart(document.getElementById('reviewChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 12 } } },
+        tooltip: { callbacks: {
+          label: ctx => ' ' + ctx.parsed.y + ' reviews'
+        }}
+      },
+      scales: {
+        x: { ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+        y: {
+          ticks: { font: { size: 11 }, stepSize: 1 },
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          suggestedMin: baseline ? parseInt(baseline) - 2 : undefined
+        }
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}
