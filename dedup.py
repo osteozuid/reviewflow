@@ -1,5 +1,7 @@
+_STOPWOORDEN = {'van', 'de', 'den', 'der', 'ter', 'ten', 'het', 'een', 'jan', 'ann', 'els'}
+
 def _naam_tokens(naam):
-    return {t.lower() for t in naam.split() if len(t) > 2}
+    return {t.lower() for t in naam.split() if len(t) > 3 and t.lower() not in _STOPWOORDEN}
 
 
 def matches_reviewed(candidate_naam, reviewed_names):
