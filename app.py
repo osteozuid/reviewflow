@@ -118,7 +118,7 @@ def do_run(modus, test_email=None):
                         log_sent([patient], bestand=patient['bestand'])
                     verzonden.append(patient)
                     _log(f'✓  {patient["naam"]}  <{patient["email"]}>')
-                    time.sleep(2)
+                    time.sleep(8)
                 except Exception as e:
                     gefaald.append(patient)
                     _log(f'✗  {patient["naam"]}  —  {e}')
