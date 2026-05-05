@@ -179,7 +179,8 @@ def log_sent(candidates, bestand, batch_id=None):
                 )
             except sqlite3.IntegrityError:
                 pass
-            upsert_contact(c.get('naam', ''), c['email'], now)
+    for c in candidates:
+        upsert_contact(c.get('naam', ''), c['email'], now)
 
 
 def log_import(bestand, rijen_gelezen, rijen_ok, unieke_patienten,
