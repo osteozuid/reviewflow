@@ -13,16 +13,17 @@
       <span>★ Al gereviewd</span>
       <span class="badge b-dim">{{ reviewed|length }}</span>
     </div>
-    <p class="text-dim" style="font-size:13px; margin:0 0 16px;">
-      Mensen die al een Google-review achterlieten. Worden overgeslagen bij verzending op basis van naam.
-    </p>
-
-    <form method="post" style="display:flex; gap:8px; margin-bottom:16px;">
-      <input type="hidden" name="action" value="add_reviewed">
-      <input type="text" name="naam" placeholder="Naam (bv. Van Loon Mark)"
-        style="flex:1; padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;" required>
-      <button type="submit" class="btn btn-primary" style="white-space:nowrap;">+ Toevoegen</button>
-    </form>
+    <div style="padding:16px 20px;">
+      <p class="text-dim" style="font-size:13px; margin:0 0 14px;">
+        Mensen die al een Google-review achterlieten. Worden overgeslagen bij verzending op basis van naam.
+      </p>
+      <form method="post" style="display:flex; gap:8px;">
+        <input type="hidden" name="action" value="add_reviewed">
+        <input type="text" name="naam" placeholder="Naam (bv. Van Loon Mark)"
+          style="flex:1; padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;" required>
+        <button type="submit" class="btn btn-primary" style="white-space:nowrap;">+ Toevoegen</button>
+      </form>
+    </div>
 
     {% if reviewed %}
     <table>
@@ -50,7 +51,7 @@
       </tbody>
     </table>
     {% else %}
-    <div class="empty" style="padding:20px 0;">Nog geen namen.</div>
+    <div class="empty" style="padding:20px;">Nog geen namen.</div>
     {% endif %}
   </div>
 
@@ -60,20 +61,21 @@
       <span>⊘ Niet mailen</span>
       <span class="badge b-dim">{{ blocked|length }}</span>
     </div>
-    <p class="text-dim" style="font-size:13px; margin:0 0 16px;">
-      Mensen die om een andere reden geen mail mogen ontvangen (bv. niet tevreden). E-mail en reden zijn optioneel.
-    </p>
-
-    <form method="post" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px;">
-      <input type="hidden" name="action" value="add_blocked">
-      <input type="text" name="naam" placeholder="Naam (bv. Janssen Piet)" required
-        style="grid-column:1/-1; padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
-      <input type="email" name="email" placeholder="E-mail (optioneel)"
-        style="padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
-      <input type="text" name="reden" placeholder="Reden (optioneel)"
-        style="padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
-      <button type="submit" class="btn btn-primary" style="grid-column:1/-1;">+ Toevoegen</button>
-    </form>
+    <div style="padding:16px 20px;">
+      <p class="text-dim" style="font-size:13px; margin:0 0 14px;">
+        Mensen die om een andere reden geen mail mogen ontvangen (bv. niet tevreden). E-mail en reden zijn optioneel.
+      </p>
+      <form method="post" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <input type="hidden" name="action" value="add_blocked">
+        <input type="text" name="naam" placeholder="Naam (bv. Janssen Piet)" required
+          style="grid-column:1/-1; padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+        <input type="email" name="email" placeholder="E-mail (optioneel)"
+          style="padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+        <input type="text" name="reden" placeholder="Reden (optioneel)"
+          style="padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+        <button type="submit" class="btn btn-primary" style="grid-column:1/-1;">+ Toevoegen</button>
+      </form>
+    </div>
 
     {% if blocked %}
     <table>
@@ -103,7 +105,7 @@
       </tbody>
     </table>
     {% else %}
-    <div class="empty" style="padding:20px 0;">Nog geen namen.</div>
+    <div class="empty" style="padding:20px;">Nog geen namen.</div>
     {% endif %}
   </div>
 
