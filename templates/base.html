@@ -69,6 +69,11 @@
         <span class="ico">◉</span> Contacten
       </a>
     </li>
+    <li class="{{ 'active' if page == 'uitsluitingen' }}">
+      <a href="{{ url_for('uitsluitingen') }}">
+        <span class="ico">⊘</span> Uitsluitingen
+      </a>
+    </li>
     <li class="{{ 'active' if page == 'logs' }}">
       <a href="{{ url_for('logs') }}">
         <span class="ico">≡</span> Logs

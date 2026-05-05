@@ -43,8 +43,8 @@ def _log(msg):
 
 
 def do_run(modus, test_email=None):
-    from db import (init_db, get_already_sent, get_blocked, get_reviewed_names,
-                    log_sent, log_import, export_review_log,
+    from db import (init_db, get_already_sent, get_blocked, get_blocked_names,
+                    get_reviewed_names, log_sent, log_import, export_review_log,
                     get_app_setting, get_active_template)
     from csv_import import load_all_csv
     from dedup import deduplicate, matches_reviewed
@@ -73,15 +73,18 @@ def do_run(modus, test_email=None):
 
         candidates, skip_stats = deduplicate(all_rows)
         already_sent = get_already_sent()
-        blocked = get_blocked()
+        blocked_emails = get_blocked()
+        blocked_names = get_blocked_names()
         reviewed = get_reviewed_names()
 
         to_mail, skipped = [], []
         for c in candidates:
             if c['email'] in already_sent:
                 skipped.append({**c, 'reden': 'Al gemaild'})
-            elif c['email'] in blocked:
+            elif c['email'] in blocked_emails:
                 skipped.append({**c, 'reden': 'Geblokkeerd'})
+            elif matches_reviewed(c['naam'], blocked_names):
+                skipped.append({**c, 'reden': 'Niet mailen'})
             else:
                 m = matches_reviewed(c['naam'], reviewed)
                 if m:
@@ -628,6 +631,40 @@ def contacts():
     init_db()
     all_contacts = get_all_contacts()
     return render_template('contacts.html', contacts=all_contacts, page='contacts')
+
+
+@app.route('/uitsluitingen', methods=['GET', 'POST'])
+def uitsluitingen():
+    from db import (init_db, get_reviewed_names_full, add_reviewed_name, delete_reviewed_name,
+                    get_blocked_list, add_blocked_person, delete_blocked_person)
+    init_db()
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add_reviewed':
+            naam = request.form.get('naam', '').strip()
+            if naam:
+                add_reviewed_name(naam)
+                flash(f'"{naam}" toegevoegd aan Al gereviewd', 'success')
+        elif action == 'delete_reviewed':
+            naam = request.form.get('naam', '')
+            delete_reviewed_name(naam)
+            flash(f'"{naam}" verwijderd', 'info')
+        elif action == 'add_blocked':
+            naam = request.form.get('naam', '').strip()
+            email = request.form.get('email', '').strip()
+            reden = request.form.get('reden', '').strip()
+            if naam:
+                add_blocked_person(naam, email, reden)
+                flash(f'"{naam}" toegevoegd aan Niet mailen', 'success')
+        elif action == 'delete_blocked':
+            bid = request.form.get('id', '')
+            delete_blocked_person(bid)
+            flash('Verwijderd', 'info')
+        return redirect(url_for('uitsluitingen'))
+
+    reviewed = get_reviewed_names_full()
+    blocked = get_blocked_list()
+    return render_template('uitsluitingen.html', reviewed=reviewed, blocked=blocked, page='uitsluitingen')
 
 
 @app.route('/contacts/export/csv')

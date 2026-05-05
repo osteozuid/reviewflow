@@ -166,6 +166,35 @@ def get_blocked():
     return {row['email'].lower() for row in rows}
 
 
+def get_blocked_names():
+    with get_connection() as conn:
+        rows = conn.execute(
+            'SELECT naam FROM blocked WHERE naam IS NOT NULL AND naam != ""'
+        ).fetchall()
+    return [row['naam'] for row in rows]
+
+
+def get_blocked_list():
+    with get_connection() as conn:
+        rows = conn.execute(
+            'SELECT id, naam, email, reden, created_at FROM blocked ORDER BY created_at DESC'
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_blocked_person(naam, email='', reden=''):
+    with get_connection() as conn:
+        conn.execute(
+            'INSERT INTO blocked (naam, email, reden) VALUES (?, ?, ?)',
+            (naam.strip(), email.strip() or None, reden.strip() or None),
+        )
+
+
+def delete_blocked_person(blocked_id):
+    with get_connection() as conn:
+        conn.execute('DELETE FROM blocked WHERE id = ?', (blocked_id,))
+
+
 def log_sent(candidates, bestand, batch_id=None):
     now = datetime.now().isoformat(timespec='seconds')
     with get_connection() as conn:
@@ -207,6 +236,19 @@ def add_reviewed_name(naam, bron='manual'):
             return True
         except sqlite3.IntegrityError:
             return False
+
+
+def delete_reviewed_name(naam):
+    with get_connection() as conn:
+        conn.execute('DELETE FROM reviewed_names WHERE naam = ?', (naam,))
+
+
+def get_reviewed_names_full():
+    with get_connection() as conn:
+        rows = conn.execute(
+            'SELECT naam, bron, created_at FROM reviewed_names ORDER BY naam'
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_reviewed_names():

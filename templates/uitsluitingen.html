@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}Uitsluitingen{% endblock %}
+{% block content %}
+
+<div class="ptitle">Uitsluitingen</div>
+<div class="ptitle-sub">Mensen die geen review-verzoek mogen ontvangen.</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+
+  <!-- ── Sectie 1: Al gereviewd ── -->
+  <div class="section">
+    <div class="sec-head">
+      <span>★ Al gereviewd</span>
+      <span class="badge b-dim">{{ reviewed|length }}</span>
+    </div>
+    <p class="text-dim" style="font-size:13px; margin:0 0 16px;">
+      Mensen die al een Google-review achterlieten. Worden overgeslagen bij verzending op basis van naam.
+    </p>
+
+    <form method="post" style="display:flex; gap:8px; margin-bottom:16px;">
+      <input type="hidden" name="action" value="add_reviewed">
+      <input type="text" name="naam" placeholder="Naam (bv. Van Loon Mark)"
+        style="flex:1; padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;" required>
+      <button type="submit" class="btn btn-primary" style="white-space:nowrap;">+ Toevoegen</button>
+    </form>
+
+    {% if reviewed %}
+    <table>
+      <thead>
+        <tr>
+          <th>Naam</th>
+          <th>Bron</th>
+          <th style="width:40px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reviewed %}
+        <tr>
+          <td class="fw-600">{{ r.naam }}</td>
+          <td><span class="badge b-dim">{{ r.bron }}</span></td>
+          <td>
+            <form method="post" onsubmit="return confirm('Verwijderen?')">
+              <input type="hidden" name="action" value="delete_reviewed">
+              <input type="hidden" name="naam" value="{{ r.naam }}">
+              <button type="submit" class="btn btn-ghost" style="padding:3px 8px; font-size:12px; color:#ef4444;">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty" style="padding:20px 0;">Nog geen namen.</div>
+    {% endif %}
+  </div>
+
+  <!-- ── Sectie 2: Niet mailen ── -->
+  <div class="section">
+    <div class="sec-head">
+      <span>⊘ Niet mailen</span>
+      <span class="badge b-dim">{{ blocked|length }}</span>
+    </div>
+    <p class="text-dim" style="font-size:13px; margin:0 0 16px;">
+      Mensen die om een andere reden geen mail mogen ontvangen (bv. niet tevreden). E-mail en reden zijn optioneel.
+    </p>
+
+    <form method="post" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px;">
+      <input type="hidden" name="action" value="add_blocked">
+      <input type="text" name="naam" placeholder="Naam (bv. Janssen Piet)" required
+        style="grid-column:1/-1; padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+      <input type="email" name="email" placeholder="E-mail (optioneel)"
+        style="padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+      <input type="text" name="reden" placeholder="Reden (optioneel)"
+        style="padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+      <button type="submit" class="btn btn-primary" style="grid-column:1/-1;">+ Toevoegen</button>
+    </form>
+
+    {% if blocked %}
+    <table>
+      <thead>
+        <tr>
+          <th>Naam</th>
+          <th>E-mail</th>
+          <th>Reden</th>
+          <th style="width:40px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in blocked %}
+        <tr>
+          <td class="fw-600">{{ b.naam or '—' }}</td>
+          <td class="mono text-dim" style="font-size:12px;">{{ b.email or '—' }}</td>
+          <td class="text-dim" style="font-size:12px;">{{ b.reden or '—' }}</td>
+          <td>
+            <form method="post" onsubmit="return confirm('Verwijderen?')">
+              <input type="hidden" name="action" value="delete_blocked">
+              <input type="hidden" name="id" value="{{ b.id }}">
+              <button type="submit" class="btn btn-ghost" style="padding:3px 8px; font-size:12px; color:#ef4444;">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty" style="padding:20px 0;">Nog geen namen.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% endblock %}
