@@ -5,10 +5,12 @@
 <div class="ptitle">Contacten</div>
 <div class="ptitle-sub">Alle patiënten die ooit een review request ontvangen hebben.</div>
 
-<div class="flex gap-8 mb-16">
+<div class="flex gap-8 mb-16" style="flex-wrap:wrap; align-items:center;">
   <a href="{{ url_for('contacts_export_csv') }}" class="btn btn-ghost">↓ Exporteer CSV</a>
   <a href="{{ url_for('contacts_export_xlsx') }}" class="btn btn-ghost">↓ Exporteer Excel</a>
-  <span class="badge b-dim" style="align-self:center;">{{ contacts|length }} contacten</span>
+  <span class="badge b-dim" style="align-self:center;" id="contact-count">{{ contacts|length }} contacten</span>
+  <input type="text" id="contact-search" placeholder="Zoek op naam of e-mail…"
+    style="margin-left:auto; padding:6px 12px; border:1px solid #ddd; border-radius:6px; font-size:14px; width:240px;">
 </div>
 
 <div class="section">
@@ -26,7 +28,7 @@
         <th style="text-align:center;">Aantal</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="contact-tbody">
       {% for c in contacts %}
       {% set letter = c.naam[0].upper() if c.naam else '?' %}
       {% set colors = ['#f28c00','#10b981','#0ea5e9','#8b5cf6','#ef4444','#f59e0b','#06b6d4','#ec4899'] %}
@@ -55,5 +57,24 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+const searchInput = document.getElementById('contact-search');
+const tbody = document.getElementById('contact-tbody');
+const countBadge = document.getElementById('contact-count');
+const totalCount = {{ contacts|length }};
+
+searchInput.addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  let visible = 0;
+  for (const row of tbody.querySelectorAll('tr')) {
+    const text = row.textContent.toLowerCase();
+    const show = !q || text.includes(q);
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  }
+  countBadge.textContent = q ? `${visible} van ${totalCount} contacten` : `${totalCount} contacten`;
+});
+</script>
 
 {% endblock %}
