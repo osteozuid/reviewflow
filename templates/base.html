@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ReviewFlow — Osteozuid</title>
+  <title>{{ app_name }}{% if g.tenant %} — {{ g.tenant.name }}{% endif %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
 <nav class="sidebar">
   <div class="logo">
+    <!-- ReviewFlow branding — always shown, never replaced by tenant logo -->
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1680.1 1562.85" style="width:120px;display:block;">
       <path d="M247.53,373.09s-527.82,598.06,103.37,1189.76c0,0-510.95-483.17-103.37-1189.76" fill="#f28c00"/>
       <path d="M0,0s650.07,462.23,170.1,1182.06c0,0,387.56-586.78-170.1-1182.06" fill="#f28c00"/>
@@ -24,8 +25,12 @@
       <rect x="1481.02" y="471.66" width="30.38" height="423.47" fill="#f28c00"/>
       <path d="M1563.69,518.01c0-32.87,14.32-49.73,44.71-49.73,18.55,0,32.92,8.42,39.64,21.09h1.66v-92.79l30.39-16.93v515.48h-30.39v-16.03h-2.51c-6.77,10.97-12.68,19.4-37.11,19.4-29.55,0-46.4-20.24-46.4-53.14v-327.35M1649.71,532.37c0-16.87-10.1-38.8-28.65-38.8s-27,10.96-27,28.68v321.45c0,19.38,8.44,29.51,24.44,29.51,13.49,0,31.21-9.3,31.21-29.51v-311.32Z" fill="#f28c00"/>
     </svg>
-    <span class="logo-name">ReviewFlow</span>
-    <span class="logo-tag">Osteozuid</span>
+    <span class="logo-name">{{ app_name }}</span>
+    {% if g.tenant %}
+      <span class="logo-tag">{{ g.tenant.name }}</span>
+    {% elif g.user and g.user.role == 'superadmin' %}
+      <span class="logo-tag" style="color:#f28c00;">Superadmin</span>
+    {% endif %}
   </div>
 
   <ul class="nav">
@@ -84,7 +89,17 @@
         <span class="ico">⚙</span> Instellingen
       </a>
     </li>
-    <li>
+
+    {% if g.user and g.user.role == 'superadmin' %}
+    <li class="nav-section">Superadmin</li>
+    <li class="{{ 'active' if page == 'admin' }}">
+      <a href="{{ url_for('admin_tenants') }}" style="color:#f28c00;">
+        <span class="ico">⊞</span> Tenants
+      </a>
+    </li>
+    {% endif %}
+
+    <li style="margin-top:auto;">
       <a href="{{ url_for('logout') }}" style="color:var(--text-dim);">
         <span class="ico">⏻</span> Uitloggen
       </a>
@@ -92,8 +107,14 @@
   </ul>
 
   <div class="sidebar-foot">
-    <span>v2.0</span>
-    <span class="badge b-green" style="font-size:10px;">Live</span>
+    {% if g.user %}
+      <span style="font-size:11px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        {{ g.user.full_name or g.user.email }}
+      </span>
+      <span class="badge b-{{ 'red' if g.user.role == 'superadmin' else 'green' }}" style="font-size:10px;">
+        {{ g.user.role }}
+      </span>
+    {% endif %}
   </div>
 </nav>
 

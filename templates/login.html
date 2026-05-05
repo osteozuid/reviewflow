@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inloggen — ReviewFlow</title>
+  <title>Inloggen — {{ app_name }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <style>
     body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg); }
@@ -32,8 +32,8 @@
       <rect x="1481.02" y="471.66" width="30.38" height="423.47" fill="#f28c00"/>
       <path d="M1563.69,518.01c0-32.87,14.32-49.73,44.71-49.73,18.55,0,32.92,8.42,39.64,21.09h1.66v-92.79l30.39-16.93v515.48h-30.39v-16.03h-2.51c-6.77,10.97-12.68,19.4-37.11,19.4-29.55,0-46.4-20.24-46.4-53.14v-327.35M1649.71,532.37c0-16.87-10.1-38.8-28.65-38.8s-27,10.96-27,28.68v321.45c0,19.38,8.44,29.51,24.44,29.51,13.49,0,31.21-9.3,31.21-29.51v-311.32Z" fill="#f28c00"/>
     </svg>
-    <span class="login-logo-name">ReviewFlow</span>
-    <span class="login-logo-sub">Osteozuid</span>
+    <span class="login-logo-name">{{ app_name }}</span>
+    <span class="login-logo-sub">Review management voor zorgpraktijken</span>
   </div>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -46,12 +46,18 @@
 
   <form method="post">
     <div class="form-group">
-      <label class="form-label">Wachtwoord</label>
-      <input type="password" name="password" autofocus
+      <label class="form-label">E-mailadres</label>
+      <input type="email" name="email" autofocus
              style="font-size:15px; padding:10px 14px;"
-             placeholder="Voer uw wachtwoord in" required>
+             placeholder="uw@email.com" required>
     </div>
-    <button type="submit" class="btn btn-primary w-full btn-lg" style="width:100%; margin-top:8px;">
+    <div class="form-group" style="margin-top:12px;">
+      <label class="form-label">Wachtwoord</label>
+      <input type="password" name="password"
+             style="font-size:15px; padding:10px 14px;"
+             placeholder="Wachtwoord" required>
+    </div>
+    <button type="submit" class="btn btn-primary w-full btn-lg" style="width:100%; margin-top:16px;">
       Inloggen →
     </button>
   </form>

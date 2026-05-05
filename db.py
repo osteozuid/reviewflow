@@ -1,114 +1,191 @@
-import sqlite3
+import csv
+import json
+import os
+import secrets
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
-from datetime import datetime
 
-DB_PATH = Path('data/review_requests.db')
+import psycopg2
+import psycopg2.extras
+from psycopg2.extras import RealDictCursor
 
-SCHEMA = '''
-CREATE TABLE IF NOT EXISTS patients (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    email       TEXT NOT NULL UNIQUE,
-    naam        TEXT,
-    voornaam    TEXT,
-    geboortedatum TEXT,
-    telefoon    TEXT,
-    gsm         TEXT,
-    agenda      TEXT,
-    created_at  TEXT DEFAULT (datetime('now'))
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://localhost/reviewflow')
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS tenants (
+    id          SERIAL PRIMARY KEY,
+    slug        VARCHAR(100) UNIQUE NOT NULL,
+    name        VARCHAR(255) NOT NULL,
+    created_at  TIMESTAMP DEFAULT NOW(),
+    is_active   BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id            SERIAL PRIMARY KEY,
+    tenant_id     INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+    email         VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role          VARCHAR(50) NOT NULL CHECK (role IN ('superadmin', 'owner', 'staff')),
+    full_name     VARCHAR(255),
+    is_active     BOOLEAN DEFAULT TRUE,
+    created_at    TIMESTAMP DEFAULT NOW(),
+    last_login    TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS invite_tokens (
+    id          SERIAL PRIMARY KEY,
+    token       VARCHAR(255) UNIQUE NOT NULL,
+    email       VARCHAR(255) NOT NULL,
+    tenant_id   INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    role        VARCHAR(50) NOT NULL DEFAULT 'owner',
+    created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    expires_at  TIMESTAMP NOT NULL,
+    accepted_at TIMESTAMP,
+    created_at  TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tenant_settings (
+    id          SERIAL PRIMARY KEY,
+    tenant_id   INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    sleutel     VARCHAR(255) NOT NULL,
+    waarde      TEXT,
+    updated_at  TIMESTAMP DEFAULT NOW(),
+    UNIQUE(tenant_id, sleutel)
 );
 
 CREATE TABLE IF NOT EXISTS review_log (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    email       TEXT NOT NULL,
-    naam        TEXT,
-    geboortedatum TEXT,
-    sent_at     TEXT,
-    status      TEXT,
-    bestand     TEXT,
-    import_batch TEXT
-);
-
-CREATE TABLE IF NOT EXISTS blocked (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    email       TEXT,
-    naam        TEXT,
-    geboortedatum TEXT,
-    reden       TEXT,
-    created_at  TEXT DEFAULT (datetime('now'))
+    id           SERIAL PRIMARY KEY,
+    tenant_id    INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    email        VARCHAR(255) NOT NULL,
+    naam         VARCHAR(255),
+    geboortedatum DATE,
+    sent_at      TIMESTAMP DEFAULT NOW(),
+    status       VARCHAR(50) DEFAULT 'sent',
+    bestand      VARCHAR(255),
+    import_batch VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS import_log (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    bestand         TEXT,
-    rijen_gelezen   INTEGER,
-    rijen_ok        INTEGER,
-    unieke_patienten INTEGER,
-    kandidaten      INTEGER,
-    gemaild         INTEGER,
-    overgeslagen    INTEGER,
-    modus           TEXT,
-    import_at       TEXT DEFAULT (datetime('now'))
+    id               SERIAL PRIMARY KEY,
+    tenant_id        INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    bestand          VARCHAR(255),
+    rijen_gelezen    INTEGER DEFAULT 0,
+    rijen_ok         INTEGER DEFAULT 0,
+    unieke_patienten INTEGER DEFAULT 0,
+    kandidaten       INTEGER DEFAULT 0,
+    gemaild          INTEGER DEFAULT 0,
+    overgeslagen     INTEGER DEFAULT 0,
+    modus            VARCHAR(50),
+    import_at        TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS blocked (
+    id            SERIAL PRIMARY KEY,
+    tenant_id     INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    email         VARCHAR(255),
+    naam          VARCHAR(255),
+    geboortedatum DATE,
+    reden         TEXT,
+    created_at    TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS reviewed_names (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    naam        TEXT NOT NULL,
-    bron        TEXT DEFAULT 'manual',
-    created_at  TEXT DEFAULT (datetime('now'))
+    id         SERIAL PRIMARY KEY,
+    tenant_id  INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    naam       VARCHAR(255) NOT NULL,
+    bron       VARCHAR(100) DEFAULT 'manual',
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(tenant_id, naam)
 );
 
 CREATE TABLE IF NOT EXISTS schedule_config (
-    id          INTEGER PRIMARY KEY CHECK (id = 1),
-    modus       TEXT DEFAULT 'manual',
+    id           SERIAL PRIMARY KEY,
+    tenant_id    INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL UNIQUE,
+    modus        VARCHAR(50) DEFAULT 'manual',
     dag_van_week INTEGER DEFAULT 0,
-    tijdstip    TEXT DEFAULT '09:00',
-    actief      INTEGER DEFAULT 0,
-    updated_at  TEXT
+    tijdstip     VARCHAR(10) DEFAULT '09:00',
+    actief       BOOLEAN DEFAULT FALSE,
+    updated_at   TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS email_templates (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    naam TEXT NOT NULL,
-    onderwerp TEXT NOT NULL,
-    body_html TEXT NOT NULL,
-    is_actief INTEGER DEFAULT 0,
-    aangemaakt_op TEXT DEFAULT (datetime('now')),
-    gewijzigd_op TEXT
+    id           SERIAL PRIMARY KEY,
+    tenant_id    INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    naam         VARCHAR(255) NOT NULL,
+    onderwerp    VARCHAR(255) NOT NULL,
+    body_html    TEXT NOT NULL,
+    is_actief    BOOLEAN DEFAULT FALSE,
+    aangemaakt_op TIMESTAMP DEFAULT NOW(),
+    gewijzigd_op  TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS contacts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    naam TEXT,
-    email TEXT NOT NULL UNIQUE,
-    eerste_mail TEXT,
-    laatste_mail TEXT,
-    aantal_mails INTEGER DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS app_settings (
-    sleutel TEXT PRIMARY KEY,
-    waarde TEXT,
-    updated_at TEXT DEFAULT (datetime('now'))
+    id           SERIAL PRIMARY KEY,
+    tenant_id    INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    naam         VARCHAR(255),
+    email        VARCHAR(255) NOT NULL,
+    eerste_mail  TIMESTAMP,
+    laatste_mail TIMESTAMP,
+    aantal_mails INTEGER DEFAULT 1,
+    UNIQUE(tenant_id, email)
 );
 
 CREATE TABLE IF NOT EXISTS review_snapshots (
-    date TEXT PRIMARY KEY,
-    total INTEGER
+    id        SERIAL PRIMARY KEY,
+    tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    date      DATE NOT NULL,
+    total     INTEGER,
+    UNIQUE(tenant_id, date)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_review_log_email ON review_log(email);
-CREATE INDEX IF NOT EXISTS idx_blocked_email ON blocked(email);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_reviewed_names_naam ON reviewed_names(naam);
-'''
+CREATE TABLE IF NOT EXISTS patients (
+    id            SERIAL PRIMARY KEY,
+    tenant_id     INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    email         VARCHAR(255),
+    email_hash    VARCHAR(255),
+    naam          VARCHAR(255),
+    voornaam      VARCHAR(255),
+    geboortedatum DATE,
+    telefoon      VARCHAR(50),
+    gsm           VARCHAR(50),
+    agenda        VARCHAR(255),
+    created_at    TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS document_acceptances (
+    id               SERIAL PRIMARY KEY,
+    tenant_id        INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    user_id          INTEGER REFERENCES users(id) NOT NULL,
+    document_type    VARCHAR(100) NOT NULL,
+    document_version VARCHAR(50),
+    accepted_at      TIMESTAMP DEFAULT NOW(),
+    ip_address       VARCHAR(50)
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id         SERIAL PRIMARY KEY,
+    tenant_id  INTEGER REFERENCES tenants(id) ON DELETE SET NULL,
+    user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    action     VARCHAR(100) NOT NULL,
+    details    JSONB,
+    ip_address VARCHAR(50),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_log_tenant    ON review_log(tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_review_log_tenant_email ON review_log(tenant_id, email);
+CREATE INDEX IF NOT EXISTS idx_blocked_tenant        ON blocked(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_audit_tenant          ON audit_logs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_audit_user            ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_invite_token          ON invite_tokens(token);
+"""
 
 
 @contextmanager
 def get_connection():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
-    conn.execute('PRAGMA journal_mode=WAL')
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.autocommit = False
     try:
         yield conn
         conn.commit()
@@ -119,243 +196,467 @@ def get_connection():
         conn.close()
 
 
+def _q(conn, query, params=()):
+    """Execute a query and return a RealDictCursor."""
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(query, params)
+    return cur
+
+
 def init_db():
     with get_connection() as conn:
-        conn.executescript(SCHEMA)
-    seed_preset_templates()
+        with conn.cursor() as cur:
+            cur.execute(SCHEMA)
 
 
-def record_review_snapshot(total):
-    from datetime import date
+# ─── Tenants ──────────────────────────────────────────────────────────────────
+
+def create_tenant(slug, name):
     with get_connection() as conn:
-        conn.execute('INSERT OR REPLACE INTO review_snapshots (date, total) VALUES (?, ?)',
-                     (date.today().isoformat(), total))
+        cur = _q(conn,
+            "INSERT INTO tenants (slug, name) VALUES (%s, %s) RETURNING id",
+            (slug.lower().strip(), name.strip()))
+        tenant_id = cur.fetchone()['id']
+    seed_preset_templates(tenant_id)
+    return tenant_id
 
-def get_review_snapshots():
+
+def get_tenant(tenant_id):
     with get_connection() as conn:
-        rows = conn.execute('SELECT date, total FROM review_snapshots ORDER BY date').fetchall()
-    return [{'date': r['date'], 'total': r['total']} for r in rows]
+        cur = _q(conn, "SELECT * FROM tenants WHERE id = %s", (tenant_id,))
+        row = cur.fetchone()
+    return dict(row) if row else None
 
-def get_review_growth(baseline=None):
+
+def get_tenant_by_slug(slug):
     with get_connection() as conn:
-        rows = conn.execute('SELECT date, total FROM review_snapshots ORDER BY date').fetchall()
-    if not rows:
-        return None
-    latest = rows[-1]
-    if baseline:
-        first_total = int(baseline)
-        first_date = 'startwaarde'
-    else:
-        first_total = rows[0]['total']
-        first_date = rows[0]['date']
-    return {'first_date': first_date, 'first_total': first_total,
-            'latest_total': latest['total'], 'growth': latest['total'] - first_total}
+        cur = _q(conn, "SELECT * FROM tenants WHERE slug = %s", (slug.lower().strip(),))
+        row = cur.fetchone()
+    return dict(row) if row else None
 
 
-def get_already_sent():
+def get_all_tenants():
     with get_connection() as conn:
-        rows = conn.execute('SELECT email FROM review_log').fetchall()
-    return {row['email'].lower() for row in rows}
-
-
-def get_blocked():
-    with get_connection() as conn:
-        rows = conn.execute(
-            'SELECT email FROM blocked WHERE email IS NOT NULL AND email != ""'
-        ).fetchall()
-    return {row['email'].lower() for row in rows}
-
-
-def get_blocked_names():
-    with get_connection() as conn:
-        rows = conn.execute(
-            'SELECT naam FROM blocked WHERE naam IS NOT NULL AND naam != ""'
-        ).fetchall()
-    return [row['naam'] for row in rows]
-
-
-def get_blocked_list():
-    with get_connection() as conn:
-        rows = conn.execute(
-            'SELECT id, naam, email, reden, created_at FROM blocked ORDER BY created_at DESC'
-        ).fetchall()
+        cur = _q(conn,
+            """SELECT t.*, COUNT(u.id) as user_count
+               FROM tenants t
+               LEFT JOIN users u ON u.tenant_id = t.id AND u.is_active = TRUE
+               GROUP BY t.id
+               ORDER BY t.created_at DESC""")
+        rows = cur.fetchall()
     return [dict(r) for r in rows]
 
 
-def add_blocked_person(naam, email='', reden=''):
+def set_tenant_active(tenant_id, active):
     with get_connection() as conn:
-        conn.execute(
-            'INSERT INTO blocked (naam, email, reden) VALUES (?, ?, ?)',
-            (naam.strip(), email.strip() or None, reden.strip() or None),
-        )
+        _q(conn, "UPDATE tenants SET is_active = %s WHERE id = %s", (active, tenant_id))
 
 
-def delete_blocked_person(blocked_id):
+# ─── Users ────────────────────────────────────────────────────────────────────
+
+def create_user(email, password_hash, role, tenant_id=None, full_name=None):
     with get_connection() as conn:
-        conn.execute('DELETE FROM blocked WHERE id = ?', (blocked_id,))
+        cur = _q(conn,
+            """INSERT INTO users (email, password_hash, role, tenant_id, full_name)
+               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+            (email.lower().strip(), password_hash, role, tenant_id, full_name))
+        user_id = cur.fetchone()['id']
+    return user_id
 
 
-def log_sent(candidates, bestand, batch_id=None):
-    now = datetime.now().isoformat(timespec='seconds')
+def get_user_by_email(email):
+    with get_connection() as conn:
+        cur = _q(conn,
+            "SELECT * FROM users WHERE email = %s AND is_active = TRUE",
+            (email.lower().strip(),))
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def get_user_by_id(user_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            "SELECT * FROM users WHERE id = %s AND is_active = TRUE", (user_id,))
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def update_user_last_login(user_id):
+    with get_connection() as conn:
+        _q(conn, "UPDATE users SET last_login = NOW() WHERE id = %s", (user_id,))
+
+
+def update_user_password(user_id, password_hash):
+    with get_connection() as conn:
+        _q(conn, "UPDATE users SET password_hash = %s WHERE id = %s", (password_hash, user_id))
+
+
+def get_tenant_users(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            """SELECT id, email, full_name, role, created_at, last_login
+               FROM users WHERE tenant_id = %s AND is_active = TRUE ORDER BY created_at""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+# ─── Invite tokens ────────────────────────────────────────────────────────────
+
+def create_invite_token(email, tenant_id, role='owner', created_by=None, expires_days=7):
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now() + timedelta(days=expires_days)
+    with get_connection() as conn:
+        _q(conn,
+            """INSERT INTO invite_tokens (token, email, tenant_id, role, created_by, expires_at)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (token, email.lower().strip(), tenant_id, role, created_by, expires_at))
+    return token
+
+
+def get_invite_token(token):
+    with get_connection() as conn:
+        cur = _q(conn, "SELECT * FROM invite_tokens WHERE token = %s", (token,))
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def accept_invite_token(token):
+    with get_connection() as conn:
+        _q(conn,
+            """UPDATE invite_tokens SET accepted_at = NOW()
+               WHERE token = %s AND accepted_at IS NULL""",
+            (token,))
+
+
+def get_pending_invites(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            """SELECT * FROM invite_tokens
+               WHERE tenant_id = %s AND accepted_at IS NULL AND expires_at > NOW()
+               ORDER BY created_at DESC""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+# ─── Audit logs ───────────────────────────────────────────────────────────────
+
+def log_audit(action, user_id=None, tenant_id=None, details=None, ip=None):
+    details_json = json.dumps(details) if details else None
+    try:
+        with get_connection() as conn:
+            _q(conn,
+                """INSERT INTO audit_logs (action, user_id, tenant_id, details, ip_address)
+                   VALUES (%s, %s, %s, %s::jsonb, %s)""",
+                (action, user_id, tenant_id, details_json, ip))
+    except Exception:
+        pass  # Audit logging must never crash the main flow
+
+
+# ─── Tenant settings ──────────────────────────────────────────────────────────
+
+def get_tenant_setting(tenant_id, sleutel, default=''):
+    with get_connection() as conn:
+        cur = _q(conn,
+            "SELECT waarde FROM tenant_settings WHERE tenant_id = %s AND sleutel = %s",
+            (tenant_id, sleutel))
+        row = cur.fetchone()
+    if row and row['waarde'] is not None:
+        return row['waarde']
+    return default
+
+
+def save_tenant_setting(tenant_id, sleutel, waarde):
+    with get_connection() as conn:
+        _q(conn,
+            """INSERT INTO tenant_settings (tenant_id, sleutel, waarde, updated_at)
+               VALUES (%s, %s, %s, NOW())
+               ON CONFLICT (tenant_id, sleutel) DO UPDATE
+               SET waarde = EXCLUDED.waarde, updated_at = NOW()""",
+            (tenant_id, sleutel, waarde))
+
+
+def save_tenant_settings(tenant_id, settings_dict):
+    for sleutel, waarde in settings_dict.items():
+        save_tenant_setting(tenant_id, sleutel, waarde)
+
+
+def get_all_tenant_settings(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            "SELECT sleutel, waarde FROM tenant_settings WHERE tenant_id = %s",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return {r['sleutel']: r['waarde'] for r in rows}
+
+
+# ─── Review log ───────────────────────────────────────────────────────────────
+
+def get_already_sent(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            "SELECT email FROM review_log WHERE tenant_id = %s", (tenant_id,))
+        rows = cur.fetchall()
+    return {r['email'].lower() for r in rows}
+
+
+def log_sent(tenant_id, candidates, bestand, batch_id=None):
+    now = datetime.now()
     with get_connection() as conn:
         for c in candidates:
             try:
-                conn.execute(
-                    '''INSERT INTO review_log
-                       (email, naam, geboortedatum, sent_at, status, bestand, import_batch)
-                       VALUES (?, ?, ?, ?, 'sent', ?, ?)''',
-                    (c['email'], c['naam'], c['geboortedatum'], now, bestand, batch_id),
-                )
-            except sqlite3.IntegrityError:
-                pass
+                _q(conn,
+                    """INSERT INTO review_log
+                       (tenant_id, email, naam, geboortedatum, sent_at, status, bestand, import_batch)
+                       VALUES (%s, %s, %s, %s, %s, 'sent', %s, %s)""",
+                    (tenant_id, c['email'], c['naam'],
+                     c.get('geboortedatum'), now, bestand, batch_id))
+            except psycopg2.errors.UniqueViolation:
+                conn.rollback()
     for c in candidates:
-        upsert_contact(c.get('naam', ''), c['email'], now)
+        upsert_contact(tenant_id, c.get('naam', ''), c['email'], now)
 
 
-def log_import(bestand, rijen_gelezen, rijen_ok, unieke_patienten,
+def log_import(tenant_id, bestand, rijen_gelezen, rijen_ok, unieke_patienten,
                kandidaten, gemaild, overgeslagen, modus):
-    now = datetime.now().isoformat(timespec='seconds')
     with get_connection() as conn:
-        conn.execute(
-            '''INSERT INTO import_log
-               (bestand, rijen_gelezen, rijen_ok, unieke_patienten,
-                kandidaten, gemaild, overgeslagen, modus, import_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (bestand, rijen_gelezen, rijen_ok, unieke_patienten,
-             kandidaten, gemaild, overgeslagen, modus, now),
-        )
+        _q(conn,
+            """INSERT INTO import_log
+               (tenant_id, bestand, rijen_gelezen, rijen_ok, unieke_patienten,
+                kandidaten, gemaild, overgeslagen, modus)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (tenant_id, bestand, rijen_gelezen, rijen_ok, unieke_patienten,
+             kandidaten, gemaild, overgeslagen, modus))
 
 
-def add_reviewed_name(naam, bron='manual'):
+def export_review_log(tenant_id, output_path):
     with get_connection() as conn:
-        try:
-            conn.execute(
-                'INSERT INTO reviewed_names (naam, bron) VALUES (?, ?)',
-                (naam.strip(), bron),
-            )
-            return True
-        except sqlite3.IntegrityError:
-            return False
-
-
-def delete_reviewed_name(naam):
-    with get_connection() as conn:
-        conn.execute('DELETE FROM reviewed_names WHERE naam = ?', (naam,))
-
-
-def get_reviewed_names_full():
-    with get_connection() as conn:
-        rows = conn.execute(
-            'SELECT naam, bron, created_at FROM reviewed_names ORDER BY naam'
-        ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def get_reviewed_names():
-    with get_connection() as conn:
-        rows = conn.execute('SELECT naam FROM reviewed_names ORDER BY naam').fetchall()
-    return [row['naam'] for row in rows]
-
-
-def get_schedule_config():
-    with get_connection() as conn:
-        row = conn.execute('SELECT * FROM schedule_config WHERE id=1').fetchone()
-    if row:
-        return dict(row)
-    return {'modus': 'manual', 'dag_van_week': 0, 'tijdstip': '09:00', 'actief': 0}
-
-
-def save_schedule_config(cfg):
-    now = datetime.now().isoformat(timespec='seconds')
-    with get_connection() as conn:
-        conn.execute(
-            '''INSERT OR REPLACE INTO schedule_config
-               (id, modus, dag_van_week, tijdstip, actief, updated_at)
-               VALUES (1, ?, ?, ?, ?, ?)''',
-            (cfg['modus'], cfg['dag_van_week'], cfg['tijdstip'], cfg['actief'], now),
-        )
-
-
-def export_review_log(output_path):
-    import csv
-    with get_connection() as conn:
-        rows = conn.execute(
-            'SELECT email, naam, geboortedatum, sent_at, status, bestand FROM review_log ORDER BY sent_at'
-        ).fetchall()
+        cur = _q(conn,
+            """SELECT email, naam, geboortedatum, sent_at, status, bestand
+               FROM review_log WHERE tenant_id = %s ORDER BY sent_at""",
+            (tenant_id,))
+        rows = cur.fetchall()
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f, delimiter=';')
         writer.writerow(['email', 'naam', 'geboortedatum', 'sent_at', 'status', 'bestand'])
         for row in rows:
-            writer.writerow(list(row))
+            writer.writerow([row['email'], row['naam'], row['geboortedatum'],
+                             row['sent_at'], row['status'], row['bestand']])
     return len(rows)
 
 
-# ─── Email Templates ──────────────────────────────────────────────────────────
-
-def get_all_templates():
+def get_sent_logs(tenant_id, limit=100):
     with get_connection() as conn:
-        rows = conn.execute(
-            'SELECT * FROM email_templates ORDER BY aangemaakt_op DESC'
-        ).fetchall()
+        cur = _q(conn,
+            """SELECT naam, email, sent_at, bestand FROM review_log
+               WHERE tenant_id = %s ORDER BY sent_at DESC LIMIT %s""",
+            (tenant_id, limit))
+        rows = cur.fetchall()
     return [dict(r) for r in rows]
 
 
-def get_active_template():
+def get_import_logs(tenant_id, limit=30):
     with get_connection() as conn:
-        row = conn.execute(
-            'SELECT * FROM email_templates WHERE is_actief = 1 LIMIT 1'
-        ).fetchone()
+        cur = _q(conn,
+            """SELECT * FROM import_log WHERE tenant_id = %s
+               ORDER BY import_at DESC LIMIT %s""",
+            (tenant_id, limit))
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+# ─── Blocked list ─────────────────────────────────────────────────────────────
+
+def get_blocked(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            """SELECT email FROM blocked
+               WHERE tenant_id = %s AND email IS NOT NULL AND email != ''""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return {r['email'].lower() for r in rows}
+
+
+def get_blocked_names(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            """SELECT naam FROM blocked
+               WHERE tenant_id = %s AND naam IS NOT NULL AND naam != ''""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [r['naam'] for r in rows]
+
+
+def get_blocked_list(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            """SELECT id, naam, email, reden, created_at FROM blocked
+               WHERE tenant_id = %s ORDER BY created_at DESC""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_blocked_person(tenant_id, naam, email='', reden=''):
+    with get_connection() as conn:
+        _q(conn,
+            "INSERT INTO blocked (tenant_id, naam, email, reden) VALUES (%s, %s, %s, %s)",
+            (tenant_id, naam.strip(), email.strip() or None, reden.strip() or None))
+
+
+def delete_blocked_person(tenant_id, blocked_id):
+    with get_connection() as conn:
+        _q(conn,
+            "DELETE FROM blocked WHERE id = %s AND tenant_id = %s",
+            (blocked_id, tenant_id))
+
+
+# ─── Reviewed names ───────────────────────────────────────────────────────────
+
+def get_reviewed_names(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            "SELECT naam FROM reviewed_names WHERE tenant_id = %s ORDER BY naam",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [r['naam'] for r in rows]
+
+
+def get_reviewed_names_full(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            """SELECT naam, bron, created_at FROM reviewed_names
+               WHERE tenant_id = %s ORDER BY naam""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_reviewed_name(tenant_id, naam, bron='manual'):
+    with get_connection() as conn:
+        try:
+            _q(conn,
+                "INSERT INTO reviewed_names (tenant_id, naam, bron) VALUES (%s, %s, %s)",
+                (tenant_id, naam.strip(), bron))
+            return True
+        except psycopg2.errors.UniqueViolation:
+            conn.rollback()
+            return False
+
+
+def delete_reviewed_name(tenant_id, naam):
+    with get_connection() as conn:
+        _q(conn,
+            "DELETE FROM reviewed_names WHERE tenant_id = %s AND naam = %s",
+            (tenant_id, naam))
+
+
+# ─── Schedule config ──────────────────────────────────────────────────────────
+
+def get_schedule_config(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            "SELECT * FROM schedule_config WHERE tenant_id = %s", (tenant_id,))
+        row = cur.fetchone()
+    if row:
+        return dict(row)
+    return {'modus': 'manual', 'dag_van_week': 0, 'tijdstip': '09:00', 'actief': False}
+
+
+def save_schedule_config(tenant_id, cfg):
+    with get_connection() as conn:
+        _q(conn,
+            """INSERT INTO schedule_config
+               (tenant_id, modus, dag_van_week, tijdstip, actief, updated_at)
+               VALUES (%s, %s, %s, %s, %s, NOW())
+               ON CONFLICT (tenant_id) DO UPDATE
+               SET modus = EXCLUDED.modus,
+                   dag_van_week = EXCLUDED.dag_van_week,
+                   tijdstip = EXCLUDED.tijdstip,
+                   actief = EXCLUDED.actief,
+                   updated_at = NOW()""",
+            (tenant_id, cfg['modus'], cfg['dag_van_week'],
+             cfg['tijdstip'], cfg['actief']))
+
+
+# ─── Email templates ──────────────────────────────────────────────────────────
+
+def get_all_templates(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            """SELECT * FROM email_templates WHERE tenant_id = %s
+               ORDER BY aangemaakt_op DESC""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_active_template(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            """SELECT * FROM email_templates
+               WHERE tenant_id = %s AND is_actief = TRUE LIMIT 1""",
+            (tenant_id,))
+        row = cur.fetchone()
     return dict(row) if row else None
 
 
-def get_template(id):
+def get_template(tenant_id, template_id):
     with get_connection() as conn:
-        row = conn.execute(
-            'SELECT * FROM email_templates WHERE id = ?', (id,)
-        ).fetchone()
+        cur = _q(conn,
+            "SELECT * FROM email_templates WHERE id = %s AND tenant_id = %s",
+            (template_id, tenant_id))
+        row = cur.fetchone()
     return dict(row) if row else None
 
 
-def save_template(naam, onderwerp, body_html, id=None):
-    now = datetime.now().isoformat(timespec='seconds')
+def save_template(tenant_id, naam, onderwerp, body_html, template_id=None):
     with get_connection() as conn:
-        if id:
-            conn.execute(
-                '''UPDATE email_templates
-                   SET naam=?, onderwerp=?, body_html=?, gewijzigd_op=?
-                   WHERE id=?''',
-                (naam, onderwerp, body_html, now, id),
-            )
+        if template_id:
+            _q(conn,
+                """UPDATE email_templates
+                   SET naam=%s, onderwerp=%s, body_html=%s, gewijzigd_op=NOW()
+                   WHERE id=%s AND tenant_id=%s""",
+                (naam, onderwerp, body_html, template_id, tenant_id))
         else:
-            conn.execute(
-                '''INSERT INTO email_templates (naam, onderwerp, body_html, aangemaakt_op)
-                   VALUES (?, ?, ?, ?)''',
-                (naam, onderwerp, body_html, now),
-            )
+            _q(conn,
+                """INSERT INTO email_templates (tenant_id, naam, onderwerp, body_html)
+                   VALUES (%s, %s, %s, %s)""",
+                (tenant_id, naam, onderwerp, body_html))
 
 
-def delete_template(id):
-    tpl = get_template(id)
+def delete_template(tenant_id, template_id):
+    tpl = get_template(tenant_id, template_id)
     if not tpl:
         return False, 'Template niet gevonden'
     if tpl['is_actief']:
         return False, 'Kan actief template niet verwijderen'
     with get_connection() as conn:
-        conn.execute('DELETE FROM email_templates WHERE id=?', (id,))
+        _q(conn,
+            "DELETE FROM email_templates WHERE id=%s AND tenant_id=%s",
+            (template_id, tenant_id))
     return True, 'Verwijderd'
 
 
-def set_active_template(id):
+def set_active_template(tenant_id, template_id):
     with get_connection() as conn:
-        conn.execute('UPDATE email_templates SET is_actief = 0')
-        conn.execute('UPDATE email_templates SET is_actief = 1 WHERE id=?', (id,))
+        _q(conn,
+            "UPDATE email_templates SET is_actief = FALSE WHERE tenant_id = %s",
+            (tenant_id,))
+        _q(conn,
+            "UPDATE email_templates SET is_actief = TRUE WHERE id = %s AND tenant_id = %s",
+            (template_id, tenant_id))
 
 
-def seed_preset_templates():
+def seed_preset_templates(tenant_id):
     with get_connection() as conn:
-        count = conn.execute('SELECT COUNT(*) FROM email_templates').fetchone()[0]
+        cur = _q(conn,
+            "SELECT COUNT(*) as cnt FROM email_templates WHERE tenant_id = %s",
+            (tenant_id,))
+        count = cur.fetchone()['cnt']
     if count > 0:
         return
 
@@ -365,33 +666,15 @@ def seed_preset_templates():
 <body style="margin:0;padding:0;background:#ffffff;font-family:Calibri,Candara,'Segoe UI',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
   <tr><td style="max-width:600px;margin:0 auto;padding:32px 24px;">
+    {{logo}}
     <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Dag {{voornaam}},</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Hartelijk bedankt voor uw bezoek aan Osteozuid. We hopen dat u zich goed voelt en dat we u goed hebben kunnen helpen.</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Als u een momentje heeft, zouden we het erg waarderen als u uw ervaring wilt delen via Google. Uw review helpt andere mensen om Osteozuid te vinden en een weloverwogen keuze te maken.</p>
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Hartelijk bedankt voor uw bezoek aan onze praktijk. We hopen dat we u goed hebben kunnen helpen.</p>
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Als u een momentje heeft, zouden we het erg waarderen als u uw ervaring wilt delen via Google. Uw review helpt andere mensen om een geschikte praktijk te vinden.</p>
     <p style="margin:24px 0;">
       <a href="{{google_link}}" style="background:#f28c00;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:4px;font-size:14px;font-weight:600;display:inline-block;">Schrijf uw Google review</a>
     </p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Heeft u opmerkingen of vragen? Antwoord dan gerust op deze mail — we lezen alles.</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0;">Vriendelijke groeten,<br><strong>Osteozuid Groepspraktijk</strong></p>
-  </td></tr>
-</table>
-</body>
-</html>'''
-
-    template_professioneel = '''<!DOCTYPE html>
-<html lang="nl">
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#ffffff;font-family:Calibri,Candara,'Segoe UI',Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
-  <tr><td style="max-width:600px;margin:0 auto;padding:32px 24px;">
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Geachte {{voornaam}},</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Bedankt voor uw bezoek aan onze praktijk. Wij streven ernaar elke patiënt de best mogelijke zorg te bieden en hopen dat u tevreden bent over uw behandeling.</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Om anderen te helpen een geschikte zorgverlener te vinden, vragen wij u vriendelijk een korte beoordeling achter te laten via Google Reviews. Dit neemt slechts een minuut in beslag.</p>
-    <p style="margin:24px 0;">
-      <a href="{{google_link}}" style="background:#f28c00;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:4px;font-size:14px;font-weight:600;display:inline-block;">Beoordeling achterlaten</a>
-    </p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Voor vragen of opmerkingen kunt u altijd contact met ons opnemen.</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0;">Met vriendelijke groeten,<br><strong>Osteozuid Groepspraktijk</strong></p>
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Heeft u opmerkingen of vragen? Antwoord dan gerust op deze mail.</p>
+    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0;">Vriendelijke groeten,<br><strong>Uw praktijk</strong></p>
   </td></tr>
 </table>
 </body>
@@ -403,118 +686,167 @@ def seed_preset_templates():
 <body style="margin:0;padding:0;background:#ffffff;font-family:Calibri,Candara,'Segoe UI',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
   <tr><td style="max-width:600px;margin:0 auto;padding:32px 24px;">
+    {{logo}}
     <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Dag {{voornaam}},</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Bedankt voor uw bezoek aan Osteozuid!</p>
     <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 20px 0;">Had u een goede ervaring? Deel het in 1 minuut via Google:</p>
     <p style="margin:0 0 24px 0;">
       <a href="{{google_link}}" style="background:#f28c00;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:4px;font-size:14px;font-weight:600;display:inline-block;">Review schrijven</a>
     </p>
-    <p style="font-size:13px;line-height:1.6;color:#888888;margin:0;">Vragen? Antwoord gewoon op deze mail.<br><strong>Osteozuid Groepspraktijk</strong></p>
+    <p style="font-size:13px;line-height:1.6;color:#888888;margin:0;">Vragen? Antwoord gewoon op deze mail.</p>
   </td></tr>
 </table>
 </body>
 </html>'''
 
-    now = datetime.now().isoformat(timespec='seconds')
     with get_connection() as conn:
-        conn.execute(
-            '''INSERT INTO email_templates (naam, onderwerp, body_html, is_actief, aangemaakt_op)
-               VALUES (?, ?, ?, 1, ?)''',
-            ('Vriendelijk', 'Uw ervaring bij Osteozuid', template_vriendelijk, now),
-        )
-        conn.execute(
-            '''INSERT INTO email_templates (naam, onderwerp, body_html, is_actief, aangemaakt_op)
-               VALUES (?, ?, ?, 0, ?)''',
-            ('Professioneel', 'Bedankt voor uw bezoek — deel uw ervaring', template_professioneel, now),
-        )
-        conn.execute(
-            '''INSERT INTO email_templates (naam, onderwerp, body_html, is_actief, aangemaakt_op)
-               VALUES (?, ?, ?, 0, ?)''',
-            ('Kort & Krachtig', '1 minuut voor uw mening?', template_kort, now),
-        )
+        _q(conn,
+            """INSERT INTO email_templates (tenant_id, naam, onderwerp, body_html, is_actief)
+               VALUES (%s, %s, %s, %s, TRUE)""",
+            (tenant_id, 'Vriendelijk', 'Uw ervaring bij onze praktijk', template_vriendelijk))
+        _q(conn,
+            """INSERT INTO email_templates (tenant_id, naam, onderwerp, body_html)
+               VALUES (%s, %s, %s, %s)""",
+            (tenant_id, 'Kort & Krachtig', '1 minuut voor uw mening?', template_kort))
 
 
 # ─── Contacts ─────────────────────────────────────────────────────────────────
 
-def get_all_contacts():
+def get_all_contacts(tenant_id):
     with get_connection() as conn:
-        rows = conn.execute(
-            'SELECT * FROM contacts ORDER BY laatste_mail DESC'
-        ).fetchall()
+        cur = _q(conn,
+            """SELECT * FROM contacts WHERE tenant_id = %s ORDER BY laatste_mail DESC""",
+            (tenant_id,))
+        rows = cur.fetchall()
     return [dict(r) for r in rows]
 
 
-def upsert_contact(naam, email, sent_at):
+def upsert_contact(tenant_id, naam, email, sent_at):
     if not email:
         return
     email = email.lower().strip()
     with get_connection() as conn:
-        existing = conn.execute(
-            'SELECT id, aantal_mails, eerste_mail FROM contacts WHERE email = ?', (email,)
-        ).fetchone()
+        cur = _q(conn,
+            "SELECT id, aantal_mails FROM contacts WHERE tenant_id = %s AND email = %s",
+            (tenant_id, email))
+        existing = cur.fetchone()
         if existing:
-            conn.execute(
-                '''UPDATE contacts SET naam=?, laatste_mail=?, aantal_mails=?
-                   WHERE email=?''',
-                (naam, sent_at, existing['aantal_mails'] + 1, email),
-            )
+            _q(conn,
+                """UPDATE contacts SET naam=%s, laatste_mail=%s, aantal_mails=%s
+                   WHERE tenant_id=%s AND email=%s""",
+                (naam, sent_at, existing['aantal_mails'] + 1, tenant_id, email))
         else:
-            conn.execute(
-                '''INSERT INTO contacts (naam, email, eerste_mail, laatste_mail, aantal_mails)
-                   VALUES (?, ?, ?, ?, 1)''',
-                (naam, email, sent_at, sent_at),
-            )
+            _q(conn,
+                """INSERT INTO contacts
+                   (tenant_id, naam, email, eerste_mail, laatste_mail, aantal_mails)
+                   VALUES (%s, %s, %s, %s, %s, 1)""",
+                (tenant_id, naam, email, sent_at, sent_at))
 
 
-def sync_contacts_from_log():
+def sync_contacts_from_log(tenant_id):
     with get_connection() as conn:
-        rows = conn.execute(
-            '''SELECT naam, email, MIN(sent_at) as eerste, MAX(sent_at) as laatste, COUNT(*) as aantal
+        cur = _q(conn,
+            """SELECT naam, email,
+                      MIN(sent_at) as eerste, MAX(sent_at) as laatste, COUNT(*) as aantal
                FROM review_log
-               WHERE status = 'sent'
-               GROUP BY email'''
-        ).fetchall()
+               WHERE tenant_id = %s AND status = 'sent'
+               GROUP BY email, naam""",
+            (tenant_id,))
+        rows = cur.fetchall()
         for row in rows:
-            existing = conn.execute(
-                'SELECT id FROM contacts WHERE email = ?', (row['email'].lower(),)
-            ).fetchone()
-            if not existing:
-                conn.execute(
-                    '''INSERT OR IGNORE INTO contacts (naam, email, eerste_mail, laatste_mail, aantal_mails)
-                       VALUES (?, ?, ?, ?, ?)''',
-                    (row['naam'], row['email'].lower(), row['eerste'], row['laatste'], row['aantal']),
-                )
+            try:
+                _q(conn,
+                    """INSERT INTO contacts
+                       (tenant_id, naam, email, eerste_mail, laatste_mail, aantal_mails)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (tenant_id, email) DO NOTHING""",
+                    (tenant_id, row['naam'], row['email'].lower(),
+                     row['eerste'], row['laatste'], row['aantal']))
+            except Exception:
+                pass
 
 
-# ─── App Settings ─────────────────────────────────────────────────────────────
+# ─── Review snapshots ─────────────────────────────────────────────────────────
 
-def get_app_setting(sleutel, default=''):
+def record_review_snapshot(tenant_id, total):
+    from datetime import date
     with get_connection() as conn:
-        row = conn.execute(
-            'SELECT waarde FROM app_settings WHERE sleutel = ?', (sleutel,)
-        ).fetchone()
-    if row and row['waarde'] is not None:
-        return row['waarde']
-    return default
+        _q(conn,
+            """INSERT INTO review_snapshots (tenant_id, date, total)
+               VALUES (%s, %s, %s)
+               ON CONFLICT (tenant_id, date) DO UPDATE SET total = EXCLUDED.total""",
+            (tenant_id, date.today(), total))
 
 
-def save_app_setting(sleutel, waarde):
-    now = datetime.now().isoformat(timespec='seconds')
+def get_review_snapshots(tenant_id):
     with get_connection() as conn:
-        conn.execute(
-            '''INSERT INTO app_settings (sleutel, waarde, updated_at)
-               VALUES (?, ?, ?)
-               ON CONFLICT(sleutel) DO UPDATE SET waarde=excluded.waarde, updated_at=excluded.updated_at''',
-            (sleutel, waarde, now),
-        )
+        cur = _q(conn,
+            """SELECT date, total FROM review_snapshots
+               WHERE tenant_id = %s ORDER BY date""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [{'date': str(r['date']), 'total': r['total']} for r in rows]
 
 
-def save_app_settings(settings_dict):
-    for sleutel, waarde in settings_dict.items():
-        save_app_setting(sleutel, waarde)
+def get_review_growth(tenant_id, baseline=None):
+    snapshots = get_review_snapshots(tenant_id)
+    if not snapshots:
+        return None
+    latest = snapshots[-1]
+    if baseline:
+        first_total = int(baseline)
+        first_date = 'startwaarde'
+    else:
+        first_total = snapshots[0]['total']
+        first_date = snapshots[0]['date']
+    return {
+        'first_date': first_date,
+        'first_total': first_total,
+        'latest_total': latest['total'],
+        'growth': latest['total'] - first_total,
+    }
 
 
-def get_all_app_settings():
+# ─── Dashboard helpers ────────────────────────────────────────────────────────
+
+def get_dashboard_stats(tenant_id):
     with get_connection() as conn:
-        rows = conn.execute('SELECT sleutel, waarde FROM app_settings').fetchall()
-    return {row['sleutel']: row['waarde'] for row in rows}
+        cur = _q(conn,
+            "SELECT COUNT(*) as total FROM review_log WHERE tenant_id = %s",
+            (tenant_id,))
+        total = cur.fetchone()['total']
+
+        cur = _q(conn,
+            """SELECT COUNT(*) as cnt FROM review_log
+               WHERE tenant_id = %s AND sent_at >= date_trunc('month', NOW())""",
+            (tenant_id,))
+        this_month = cur.fetchone()['cnt']
+
+        cur = _q(conn,
+            "SELECT * FROM import_log WHERE tenant_id = %s ORDER BY import_at DESC LIMIT 1",
+            (tenant_id,))
+        last_run = cur.fetchone()
+
+        cur = _q(conn,
+            """SELECT naam, email, sent_at FROM review_log
+               WHERE tenant_id = %s ORDER BY sent_at DESC LIMIT 15""",
+            (tenant_id,))
+        recent = cur.fetchall()
+
+        cur = _q(conn,
+            "SELECT COUNT(*) as cnt FROM reviewed_names WHERE tenant_id = %s",
+            (tenant_id,))
+        reviewed_count = cur.fetchone()['cnt']
+
+        cur = _q(conn,
+            "SELECT DATE(MIN(sent_at)) as d FROM review_log WHERE tenant_id = %s",
+            (tenant_id,))
+        first_sent = cur.fetchone()
+
+    return {
+        'total': total,
+        'this_month': this_month,
+        'last_run': dict(last_run) if last_run else None,
+        'recent': [dict(r) for r in recent],
+        'reviewed_count': reviewed_count,
+        'first_sent_date': str(first_sent['d']) if first_sent and first_sent['d'] else None,
+    }
