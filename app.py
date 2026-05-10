@@ -18,12 +18,17 @@ load_dotenv()
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
-app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'reviewflow-change-in-prod')
-app.jinja_env.globals['enumerate'] = enumerate
+import config
 
-APP_NAME     = os.environ.get('APP_NAME', 'ReviewFlow')
-APP_BASE_URL = os.environ.get('APP_BASE_URL', 'http://localhost:5000').rstrip('/')
+app = Flask(__name__)
+app.secret_key = config.SECRET_KEY
+app.jinja_env.globals['enumerate'] = enumerate
+app.jinja_env.globals['PLATFORM_NAME'] = config.PLATFORM_NAME
+app.jinja_env.globals['TOOL_NAME'] = config.TOOL_NAME
+app.jinja_env.globals['APP_NAME'] = config.APP_NAME
+
+APP_NAME     = config.APP_NAME
+APP_BASE_URL = config.APP_BASE_URL.rstrip('/')
 
 ALLOWED = {'.csv', '.xlsx', '.xls'}
 
