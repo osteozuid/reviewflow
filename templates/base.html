@@ -3,44 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ app_name }}{% if g.tenant %} — {{ g.tenant.name }}{% endif %}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <title>ReviewFlow — Osteozuid</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-
-<!-- Lucide icon sprite -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <symbol id="i-layout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></symbol>
-    <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></symbol>
-    <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
-    <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
-    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></symbol>
-    <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/></symbol>
-    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
-    <symbol id="i-ban" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/></symbol>
-    <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="0.8"/><circle cx="4" cy="12" r="0.8"/><circle cx="4" cy="18" r="0.8"/></symbol>
-    <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
-    <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
-    <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></symbol>
-    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></symbol>
-    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
-    <symbol id="i-arrowup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></symbol>
-    <symbol id="i-arrowdown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></symbol>
-    <symbol id="i-chevright" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></symbol>
-    <symbol id="i-chevdown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></symbol>
-    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
-    <symbol id="i-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
-    <symbol id="i-building" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><line x1="9" y1="8" x2="9" y2="8"/><line x1="15" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></symbol>
-    <symbol id="i-trending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></symbol>
-    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
-    <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></symbol>
-    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></symbol>
-  </defs>
-</svg>
 
 <nav class="sidebar">
   <div class="logo">
@@ -62,119 +28,86 @@
     <span class="logo-tag">Osteozuid</span>
   </div>
 
-  <nav class="nav">
-    <div class="nav-section">Overzicht</div>
-    <a href="{{ url_for('dashboard') }}" class="nav-item {% if page == 'dashboard' %}active{% endif %}">
-      <svg class="ico"><use href="#i-layout"/></svg>
-      Dashboard
-    </a>
-    <a href="{{ url_for('google_reviews_page') }}" class="nav-item {% if page == 'reviews' %}active{% endif %}">
-      <svg class="ico"><use href="#i-star"/></svg>
-      Google Reviews
-    </a>
+  <ul class="nav">
+    <li class="nav-section">Overzicht</li>
+    <li class="{{ 'active' if page == 'dashboard' }}">
+      <a href="{{ url_for('dashboard') }}">
+        <span class="ico">⬡</span> Dashboard
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'reviews' }}">
+      <a href="{{ url_for('google_reviews_page') }}">
+        <span class="ico">★</span> Google Reviews
+      </a>
+    </li>
 
-    <div class="nav-section">Verzenden</div>
-    <a href="{{ url_for('upload') }}" class="nav-item {% if page == 'upload' %}active{% endif %}">
-      <svg class="ico"><use href="#i-upload"/></svg>
-      Upload
-    </a>
-    <a href="{{ url_for('run_page') }}" class="nav-item {% if page == 'run' %}active{% endif %}">
-      <svg class="ico"><use href="#i-play"/></svg>
-      Uitvoeren
-    </a>
-    <a href="{{ url_for('schedule') }}" class="nav-item {% if page == 'schedule' %}active{% endif %}">
-      <svg class="ico"><use href="#i-cal"/></svg>
-      Schema
-    </a>
+    <li class="nav-section">Verzenden</li>
+    <li class="{{ 'active' if page == 'upload' }}">
+      <a href="{{ url_for('upload') }}">
+        <span class="ico">↑</span> Upload
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'run' }}">
+      <a href="{{ url_for('run_page') }}">
+        <span class="ico">▶</span> Uitvoeren
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'schedule' }}">
+      <a href="{{ url_for('schedule') }}">
+        <span class="ico">◷</span> Schema
+      </a>
+    </li>
 
-    <div class="nav-section">Beheer</div>
-    <a href="{{ url_for('templates_list') }}" class="nav-item {% if page == 'templates' %}active{% endif %}">
-      <svg class="ico"><use href="#i-mail"/></svg>
-      E-mail Templates
-    </a>
-    <a href="{{ url_for('contacts') }}" class="nav-item {% if page == 'contacts' %}active{% endif %}">
-      <svg class="ico"><use href="#i-users"/></svg>
-      Contacten
-    </a>
-    <a href="{{ url_for('uitsluitingen') }}" class="nav-item {% if page == 'uitsluitingen' %}active{% endif %}">
-      <svg class="ico"><use href="#i-ban"/></svg>
-      Uitsluitingen
-    </a>
-    <a href="{{ url_for('logs') }}" class="nav-item {% if page == 'logs' %}active{% endif %}">
-      <svg class="ico"><use href="#i-list"/></svg>
-      Logs
-    </a>
-    <a href="{{ url_for('settings') }}" class="nav-item {% if page == 'settings' %}active{% endif %}">
-      <svg class="ico"><use href="#i-settings"/></svg>
-      Instellingen
-    </a>
-
-    {% if g.user and g.user.role == 'superadmin' %}
-    <div class="nav-section">Superadmin</div>
-    <a href="{{ url_for('admin_tenants') }}" class="nav-item {% if page == 'admin' %}active{% endif %}">
-      <svg class="ico"><use href="#i-building"/></svg>
-      Tenants
-    </a>
-    {% endif %}
-  </nav>
+    <li class="nav-section">Beheer</li>
+    <li class="{{ 'active' if page == 'templates' }}">
+      <a href="{{ url_for('templates_list') }}">
+        <span class="ico">✉</span> E-mail Templates
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'contacts' }}">
+      <a href="{{ url_for('contacts') }}">
+        <span class="ico">◉</span> Contacten
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'uitsluitingen' }}">
+      <a href="{{ url_for('uitsluitingen') }}">
+        <span class="ico">⊘</span> Uitsluitingen
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'logs' }}">
+      <a href="{{ url_for('logs') }}">
+        <span class="ico">≡</span> Logs
+      </a>
+    </li>
+    <li class="{{ 'active' if page == 'settings' }}">
+      <a href="{{ url_for('settings') }}">
+        <span class="ico">⚙</span> Instellingen
+      </a>
+    </li>
+    <li>
+      <a href="{{ url_for('logout') }}" style="color:var(--text-dim);">
+        <span class="ico">⏻</span> Uitloggen
+      </a>
+    </li>
+  </ul>
 
   <div class="sidebar-foot">
-    {% if g.user %}
-      <div class="avatar">{{ (g.user.full_name or g.user.email)|initials }}</div>
-      <div class="user-meta">
-        <span class="user-name">{{ g.user.full_name or g.user.email }}</span>
-        <span class="user-role">{{ g.user.role|title }}{% if g.tenant %} · {{ g.tenant.name }}{% endif %}</span>
-      </div>
-      <a href="{{ url_for('logout') }}" class="icon-btn" title="Uitloggen" aria-label="Uitloggen">
-        <svg width="16" height="16"><use href="#i-logout"/></svg>
-      </a>
-    {% endif %}
+    <span>v2.0</span>
+    <span class="badge b-green" style="font-size:10px;">Live</span>
   </div>
 </nav>
 
 <div class="main">
-  <header class="topbar">
-    <div class="crumbs">
-      {% if g.tenant %}
-        <span>{{ g.tenant.name }}</span>
-        <svg class="ico crumb-sep"><use href="#i-chevright"/></svg>
-      {% endif %}
-      <span class="crumb-here">{% block breadcrumb %}{% endblock %}</span>
-    </div>
-
-    {% if last_sync %}
-    <span class="sync-pill" title="Laatste synchronisatie">
-      <span class="dot"></span>
-      Laatste run <span class="mono">{{ last_sync|fmtdt_short }}</span>
-    </span>
-    {% endif %}
-
+  <div class="topbar">
+    <span class="breadcrumb">{% block breadcrumb %}{% endblock %}</span>
     <div class="topbar-actions">
-      {% block topbar_actions %}
-        <a href="#" class="btn btn-quiet btn-sm" aria-label="Zoeken">
-          <svg class="ico"><use href="#i-search"/></svg>
-        </a>
-        <a href="#" class="btn btn-ghost btn-sm">
-          <svg class="ico"><use href="#i-upload"/></svg>
-          Upload
-        </a>
-        <a href="#" class="btn btn-primary btn-sm">
-          <svg class="ico"><use href="#i-play"/></svg>
-          Uitvoeren
-        </a>
-      {% endblock %}
-    </div>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-      <div style="position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:9999;">
+      {% with messages = get_flashed_messages(with_categories=true) %}
         {% for cat, msg in messages %}
           <div class="toast toast-{{ cat }}">{{ msg }}</div>
         {% endfor %}
-      </div>
-      {% endif %}
-    {% endwith %}
-  </header>
+      {% endwith %}
+    </div>
+  </div>
   <div class="content">
     {% block content %}{% endblock %}
   </div>
