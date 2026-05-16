@@ -6,7 +6,7 @@
 <div class="ptitle-sub">Kies welke e-mail patiënten ontvangen. Pas de tekst aan of maak een eigen template.</div>
 
 <div class="mb-16">
-  <a href="{{ url_for('template_new') }}" class="btn btn-primary">+ Nieuwe template</a>
+  <a href="{{ url_for('template_new') }}" class="btn btn-primary">Nieuwe template</a>
 </div>
 
 {% if templates %}
@@ -19,20 +19,20 @@
     <div class="tpl-card-title">{{ tpl.naam }}</div>
     <div class="tpl-card-sub">
       <strong>Onderwerp:</strong> {{ tpl.onderwerp }}<br>
-      <span class="text-dim">Aangemaakt: {{ tpl.aangemaakt_op[:10] if tpl.aangemaakt_op else '—' }}</span>
+      <span class="text-dim">Aangemaakt: {{ tpl.aangemaakt_op.strftime('%Y-%m-%d') if tpl.aangemaakt_op else '—' }}</span>
     </div>
 
     <div class="flex gap-8" style="flex-wrap:wrap;">
       {% if not tpl.is_actief %}
       <form method="post" action="{{ url_for('template_activate', id=tpl.id) }}" style="margin:0;">
-        <button type="submit" class="btn btn-green btn-sm">✓ Activeren</button>
+        <button type="submit" class="btn btn-primary btn-sm" style="background-color:var(--pos);">Activeren</button>
       </form>
       {% endif %}
-      <a href="{{ url_for('template_edit', id=tpl.id) }}" class="btn btn-ghost btn-sm">✎ Bewerken</a>
+      <a href="{{ url_for('template_edit', id=tpl.id) }}" class="btn btn-ghost btn-sm">Bewerken</a>
       {% if not tpl.is_actief %}
       <form method="post" action="{{ url_for('template_delete', id=tpl.id) }}"
             onsubmit="return confirm('Template verwijderen?')" style="margin:0;">
-        <button type="submit" class="btn btn-danger btn-sm">✕</button>
+        <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--neg);">Verwijderen</button>
       </form>
       {% endif %}
     </div>
@@ -50,8 +50,8 @@
   <div style="padding:16px 20px; font-size:13px; color:var(--text-dim);">
     Gebruik deze variabelen in uw template — ze worden automatisch ingevuld bij verzending:
     <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
-      <code style="background:var(--surface2);border:1px solid var(--border);padding:4px 10px;border-radius:4px;color:var(--accent);font-size:12px;">{{voornaam}}</code>
-      <code style="background:var(--surface2);border:1px solid var(--border);padding:4px 10px;border-radius:4px;color:var(--accent);font-size:12px;">{{google_link}}</code>
+      <code style="background:var(--surface-2);border:1px solid var(--border);padding:4px 10px;border-radius:4px;color:var(--accent);font-size:12px;">{{voornaam}}</code>
+      <code style="background:var(--surface-2);border:1px solid var(--border);padding:4px 10px;border-radius:4px;color:var(--accent);font-size:12px;">{{google_link}}</code>
     </div>
   </div>
 </div>

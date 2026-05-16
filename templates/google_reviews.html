@@ -7,13 +7,13 @@
 
 {% if error %}
 <div class="alert alert-warning mb-24">
-  <span>⚠</span>
+  <svg class="ico"><use href="#i-help"/></svg>
   <div>
     <strong>Reviews kunnen niet worden geladen.</strong><br>
     {{ error }}<br>
     {% if 'API key' in error or 'Place ID' in error or 'vereist' in error %}
     <a href="{{ url_for('settings') }}" class="btn btn-ghost btn-sm mt-12" style="margin-top:8px;">
-      ⚙ Ga naar Instellingen
+      <svg class="ico"><use href="#i-settings"/></svg> Ga naar Instellingen
     </a>
     {% endif %}
   </div>
@@ -89,7 +89,7 @@
 </div>
 
 <div class="alert alert-info mt-12">
-  <span>ℹ</span>
+  <svg class="ico"><use href="#i-help"/></svg>
   <span>Google Places API geeft maximaal 5 recente reviews terug. Voor het volledige overzicht,
   {% if maps_url %}<a href="{{ maps_url }}" target="_blank" style="color:var(--teal);">open Google Maps</a>{% else %}open Google Maps{% endif %}
   → klik op <strong>Reviews</strong> → sorteer op <strong>Nieuwste</strong>.</span>

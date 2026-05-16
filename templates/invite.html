@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Uitnodiging aanvaarden — {{ app_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg); }
+    .invite-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow-md); padding:40px 48px; width:100%; max-width:440px; }
+    .invite-logo { display:flex; flex-direction:column; align-items:center; margin-bottom:28px; gap:6px; }
+    .invite-logo svg { width:80px; }
+    .invite-logo-name { font-size:18px; font-weight:700; color:var(--text); }
+    .invite-header { font-size:16px; font-weight:600; color:var(--text); margin-bottom:6px; }
+    .invite-sub { font-size:13px; color:var(--text-dim); margin-bottom:24px; }
+  </style>
+</head>
+<body>
+<div class="invite-card">
+  <div class="invite-logo">
+    <span class="invite-logo-name" style="font-size:22px;margin-bottom:12px;">{{ app_name }}</span>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'warning' if cat == 'error' else cat }}" style="margin-bottom:16px;">
+        <span>{{ msg }}</span>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <p class="invite-header">Welkom bij {{ tenant.name }}</p>
+  <p class="invite-sub">
+    U bent uitgenodigd als <strong>{{ invite.role }}</strong> voor <strong>{{ tenant.name }}</strong>
+    via {{ invite.email }}. Maak hieronder uw account aan.
+  </p>
+
+  <form method="post">
+    <div class="form-group">
+      <label class="form-label">Volledige naam</label>
+      <input type="text" name="full_name" autofocus required
+             style="font-size:15px;padding:10px 14px;"
+             placeholder="Uw naam">
+    </div>
+    <div class="form-group" style="margin-top:12px;">
+      <label class="form-label">Wachtwoord <span style="color:var(--text-dim);font-weight:400;">(min. 8 tekens)</span></label>
+      <input type="password" name="password" required
+             style="font-size:15px;padding:10px 14px;"
+             placeholder="Kies een wachtwoord">
+    </div>
+    <div class="form-group" style="margin-top:12px;">
+      <label class="form-label">Herhaal wachtwoord</label>
+      <input type="password" name="password2" required
+             style="font-size:15px;padding:10px 14px;"
+             placeholder="Wachtwoord herhalen">
+    </div>
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:20px;font-size:15px;padding:12px;">
+      Account aanmaken →
+    </button>
+  </form>
+</div>
+</body>
+</html>

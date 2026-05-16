@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}Superadmin / Tenants{% endblock %}
+{% block content %}
+
+<div class="card" style="margin-bottom:24px;">
+  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+    <h2 style="margin:0;font-size:18px;">Tenants</h2>
+    <span class="badge b-red">Superadmin</span>
+  </div>
+
+  <table class="table" style="margin-top:0;">
+    <thead>
+      <tr>
+        <th>Naam</th>
+        <th>Slug</th>
+        <th>Gebruikers</th>
+        <th>Status</th>
+        <th>Aangemaakt</th>
+        <th>Acties</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tenants %}
+      <tr>
+        <td><strong>{{ t.name }}</strong></td>
+        <td><code>{{ t.slug }}</code></td>
+        <td>{{ t.user_count }}</td>
+        <td>
+          {% if t.is_active %}
+            <span class="badge b-green">Actief</span>
+          {% else %}
+            <span class="badge b-gray">Inactief</span>
+          {% endif %}
+        </td>
+        <td>{{ t.created_at | fmtdt }}</td>
+        <td>
+          <button class="btn btn-sm btn-secondary"
+                  onclick="toggleInviteForm({{ t.id }})">
+            + Uitnodigen
+          </button>
+          <div id="invite-form-{{ t.id }}" style="display:none;margin-top:8px;">
+            <form method="post" action="{{ url_for('admin_tenant_invite', tenant_id=t.id) }}"
+                  style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input type="email" name="invite_email" required placeholder="e-mail"
+                     style="padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;">
+              <select name="invite_role" style="padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:6px;">
+                <option value="owner">owner</option>
+                <option value="staff">staff</option>
+              </select>
+              <button type="submit" class="btn btn-sm btn-primary">Versturen</button>
+            </form>
+          </div>
+
+          {% set invites = pending_invites.get(t.id, []) %}
+          {% if invites %}
+            <div style="margin-top:6px;">
+              {% for inv in invites %}
+                <div style="font-size:11px;color:var(--text-dim);">
+                  ⏳ {{ inv.email }} ({{ inv.role }}, verloopt {{ inv.expires_at | fmtdt }})
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="text-align:center;color:var(--text-dim);">Geen tenants gevonden</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3 style="margin:0;font-size:16px;">Nieuwe tenant aanmaken</h3>
+  </div>
+  <div style="padding:20px;">
+    <form method="post" action="{{ url_for('admin_tenant_create') }}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group">
+          <label class="form-label">Naam <span style="color:var(--text-dim);font-weight:400;">(bv. Fysiozuid)</span></label>
+          <input type="text" name="name" required placeholder="Praktijknaam" style="padding:8px 12px;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Slug <span style="color:var(--text-dim);font-weight:400;">(bv. fysiozuid)</span></label>
+          <input type="text" name="slug" required placeholder="unieke-slug"
+                 pattern="[a-z0-9\-]+" title="Alleen kleine letters, cijfers en koppeltekens"
+                 style="padding:8px 12px;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Uitnodigingsmail owner</label>
+          <input type="email" name="invite_email" required placeholder="owner@praktijk.be"
+                 style="padding:8px 12px;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Rol</label>
+          <select name="invite_role" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+            <option value="owner">owner</option>
+            <option value="staff">staff</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-top:8px;">
+        Tenant aanmaken + uitnodiging versturen
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+function toggleInviteForm(id) {
+  const el = document.getElementById('invite-form-' + id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

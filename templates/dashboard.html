@@ -1,130 +1,272 @@
 {% extends 'base.html' %}
 {% block breadcrumb %}Dashboard{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('logs') }}" class="btn btn-quiet btn-sm" aria-label="Logs">
+    <svg class="ico"><use href="#i-list"/></svg>
+  </a>
+  <a href="{{ url_for('upload') }}" class="btn btn-ghost btn-sm">
+    <svg class="ico"><use href="#i-upload"/></svg> Upload
+  </a>
+  <a href="{{ url_for('run_page') }}" class="btn btn-primary btn-sm">
+    <svg class="ico"><use href="#i-play"/></svg> Uitvoeren
+  </a>
+{% endblock %}
+
 {% block content %}
 
-<div class="ptitle">Dashboard</div>
-<div class="ptitle-sub">Overzicht van alle review request activiteit.</div>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Goedemiddag{% if g.user %}, {{ g.user.full_name.split()[0] if g.user.full_name else 'Gebruiker' }}{% endif %}</h1>
+    <p class="page-sub">
+      {% if input_count > 0 %}{{ input_count }} bestand{{ 'en' if input_count != 1 else '' }} klaar om te verwerken · {% endif %}
+      {% if schedule and schedule.actief %}volgende automatische run {{ next_run or '—' }}{% else %}geen geplande run{% endif %}
+    </p>
+  </div>
+  <div class="range-tabs" role="tablist">
+    <button>7 dagen</button>
+    <button class="active">30 dagen</button>
+    <button>Dit jaar</button>
+    <button>Alles</button>
+  </div>
+</div>
 
-<div class="cards">
-  <div class="card c-orange">
-    <div class="card-icon i-orange">📨</div>
-    <div class="card-label">Totaal verstuurd</div>
-    <div class="card-val">{{ total }}</div>
-    <div class="card-sub">review requests ooit</div>
-  </div>
-  <div class="card c-blue">
-    <div class="card-icon i-blue">📅</div>
-    <div class="card-label">Deze maand</div>
-    <div class="card-val">{{ this_month }}</div>
-    <div class="card-sub">verstuurd</div>
-  </div>
-  <div class="card c-purple">
-    <div class="card-icon i-purple">🚫</div>
-    <div class="card-label">Al gereviewd</div>
-    <div class="card-val">{{ reviewed_count }}</div>
-    <div class="card-sub">namen geblokkeerd</div>
-  </div>
-  <div class="card c-green">
-    <div class="card-icon i-green">⏰</div>
-    <div class="card-label">Volgende automatische run</div>
-    <div class="card-val" style="font-size:16px; padding-top:4px;">{{ next_run or '—' }}</div>
-    <div class="card-sub">
-      {% if schedule and schedule.actief %}{{ schedule.modus }}{% else %}niet gepland{% endif %}
+<!-- Stat row -->
+<section class="stats">
+  <article class="stat">
+    <div class="stat-head">
+      <svg class="ico"><use href="#i-send"/></svg>
+      Verstuurd totaal
+    </div>
+    <div class="stat-val">{{ "{:,}".format(total).replace(",", ".") if total else "—" }}</div>
+    <svg class="spark" viewBox="0 0 120 28" preserveAspectRatio="none" style="display:none;">
+      <path class="area" d="M0,24 L0,21 L15,19 L30,17 L45,16 L60,14 L75,11 L90,9 L105,7 L120,5 L120,28 L0,28 Z"/>
+      <path class="line" d="M0,21 L15,19 L30,17 L45,16 L60,14 L75,11 L90,9 L105,7 L120,5"/>
+    </svg>
+    <div class="stat-foot">
+      {% if delta_total %}
+        <span class="delta {{ 'up' if delta_total > 0 else 'down' if delta_total < 0 else 'flat' }}">
+          <svg class="ico"><use href="#i-arrow{{ 'up' if delta_total >= 0 else 'down' }}"/></svg>
+          {{ '+' if delta_total > 0 }}{{ delta_total }}%
+        </span>
+      {% endif %}
+      <span class="note">vs vorige periode</span>
+    </div>
+  </article>
+
+  <article class="stat">
+    <div class="stat-head">
+      <svg class="ico"><use href="#i-cal"/></svg>
+      Deze maand
+    </div>
+    <div class="stat-val">{{ this_month if this_month else "0" }}</div>
+    <svg class="spark" viewBox="0 0 120 28" preserveAspectRatio="none" style="display:none;">
+      <path class="area" d="M0,20 L0,18 L20,22 L40,15 L60,12 L80,18 L100,9 L120,6 L120,28 L0,28 Z"/>
+      <path class="line" d="M0,18 L20,22 L40,15 L60,12 L80,18 L100,9 L120,6"/>
+    </svg>
+    <div class="stat-foot">
+      {% if delta_month %}
+        <span class="delta {{ 'up' if delta_month > 0 else 'down' if delta_month < 0 else 'flat' }}">
+          <svg class="ico"><use href="#i-arrow{{ 'up' if delta_month >= 0 else 'down' }}"/></svg>
+          {{ '+' if delta_month > 0 }}{{ delta_month }}
+        </span>
+      {% endif %}
+      <span class="note">verstuurd</span>
+    </div>
+  </article>
+
+  <article class="stat pos">
+    <div class="stat-head">
+      <svg class="ico"><use href="#i-check"/></svg>
+      Reviews ontvangen
+    </div>
+    <div class="stat-val">{{ reviewed_count if reviewed_count else "0" }} <span class="unit">· {% if total > 0 %}{{ "%.1f" | format(reviewed_count / total * 100) }}%{% else %}—{% endif %}</span></div>
+    <svg class="spark" viewBox="0 0 120 28" preserveAspectRatio="none" style="display:none;">
+      <path class="area" d="M0,22 L0,20 L20,18 L40,17 L60,14 L80,12 L100,11 L120,9 L120,28 L0,28 Z"/>
+      <path class="line" d="M0,20 L20,18 L40,17 L60,14 L80,12 L100,11 L120,9"/>
+    </svg>
+    <div class="stat-foot">
+      {% if delta_review_rate %}
+        <span class="delta {{ 'up' if delta_review_rate > 0 else 'down' if delta_review_rate < 0 else 'flat' }}">
+          <svg class="ico"><use href="#i-arrow{{ 'up' if delta_review_rate >= 0 else 'down' }}"/></svg>
+          {{ '+' if delta_review_rate > 0 }}{{ delta_review_rate }} pp
+        </span>
+      {% endif %}
+      <span class="note">conversie</span>
+    </div>
+  </article>
+
+  <article class="stat stat-next">
+    <div class="stat-head">
+      <svg class="ico"><use href="#i-clock"/></svg>
+      Volgende run
+    </div>
+    <div class="stat-val" style="font-size:18px;">{{ next_run or '—' }}</div>
+    <div class="next-meta">
+      {% if schedule and schedule.actief %}
+        <span class="pill accent"><svg class="ico"><use href="#i-cal"/></svg> {{ schedule.modus|title }}</span>
+      {% else %}
+        <span class="pill" style="opacity:0.5;">Niet gepland</span>
+      {% endif %}
+    </div>
+    <div class="stat-foot">
+      <a href="{{ url_for('schedule') }}" class="btn btn-quiet btn-sm" style="padding:4px 8px;margin-left:-8px;">Schema aanpassen <svg class="ico" width="12" height="12"><use href="#i-chevright"/></svg></a>
+    </div>
+  </article>
+</section>
+
+<!-- Chart + quick actions -->
+<section class="row-2">
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">
+          <svg class="ico"><use href="#i-star"/></svg>
+          Google reviews – groei
+        </div>
+        {% if review_snapshots %}
+        <div class="panel-sub">Sinds {{ review_snapshots[0].date if review_snapshots else '—' }}</div>
+        {% endif %}
+      </div>
+      <div class="range-tabs">
+        <button>30d</button>
+        <button class="active">90d</button>
+        <button>Alles</button>
+      </div>
+    </div>
+    {% if review_snapshots %}
+    <div class="chart-meta">
+      <div class="big">{{ review_snapshots[-1].total if review_snapshots else '—' }}</div>
+      {% if review_growth %}
+      <span class="delta up"><svg class="ico"><use href="#i-arrowup"/></svg>+{{ review_growth.growth }}</span>
+      {% endif %}
+      {% if review_baseline %}
+      <span class="sm">tegen startwaarde {{ review_baseline }}</span>
+      {% endif %}
+    </div>
+    <div class="panel-body" style="padding-top: 0;">
+      <canvas id="reviewChart" style="width:100%; height:220px;"></canvas>
+    </div>
+    {% else %}
+    <div class="panel-body" style="padding:40px; text-align:center; color:var(--text-3);">
+      Nog geen Google review data beschikbaar
+    </div>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">Snelle acties</div>
+        <div class="panel-sub">Aanbevolen voor jou</div>
+      </div>
+    </div>
+    <div class="action-list panel-body flush">
+
+      <a href="{{ url_for('run_page') }}" class="action {% if input_count > 0 %}primary{% endif %}">
+        <div class="ico-tile"><svg class="ico"><use href="#i-play"/></svg></div>
+        <div>
+          <div class="label">Uitvoeren</div>
+          <div class="sub">
+            {% if input_count > 0 %}{{ input_count }} CSV-bestand{{ 'en' if input_count != 1 else '' }} klaar{% else %}Geen bestanden in wachtrij{% endif %}
+          </div>
+        </div>
+        <svg class="chev" width="16" height="16"><use href="#i-chevright"/></svg>
+      </a>
+
+      <a href="{{ url_for('templates_list') }}" class="action">
+        <div class="ico-tile"><svg class="ico"><use href="#i-mail"/></svg></div>
+        <div>
+          <div class="label">E-mail templates</div>
+          <div class="sub">Beheer en bewerk templates</div>
+        </div>
+        <svg class="chev" width="16" height="16"><use href="#i-chevright"/></svg>
+      </a>
+
+      <a href="{{ url_for('google_reviews_page') }}" class="action">
+        <div class="ico-tile"><svg class="ico"><use href="#i-star"/></svg></div>
+        <div>
+          <div class="label">Google reviews</div>
+          <div class="sub">Bekijk en analyseer reviews</div>
+        </div>
+        <svg class="chev" width="16" height="16"><use href="#i-chevright"/></svg>
+      </a>
+
+      <a href="{{ url_for('export_log') }}" class="action">
+        <div class="ico-tile"><svg class="ico"><use href="#i-download"/></svg></div>
+        <div>
+          <div class="label">Exporteer verzendlog</div>
+          <div class="sub">CSV • alle verzendingen</div>
+        </div>
+        <svg class="chev" width="16" height="16"><use href="#i-chevright"/></svg>
+      </a>
+
+    </div>
+  </article>
+
+</section>
+
+<!-- Activity table -->
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">Recente activiteit</div>
+      <div class="panel-sub">Laatste 6 verzonden requests</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-ghost btn-sm">
+        <svg class="ico"><use href="#i-filter"/></svg>
+        Filter
+      </button>
+      <a href="{{ url_for('logs') }}" class="btn btn-ghost btn-sm">Alle logs <svg class="ico"><use href="#i-chevright"/></svg></a>
     </div>
   </div>
-  {% if review_growth %}
-  <div class="card c-teal">
-    <div class="card-icon i-teal">⭐</div>
-    <div class="card-label">Nieuwe Google reviews</div>
-    <div class="card-val">+{{ review_growth.growth }}</div>
-    <div class="card-sub">{{ review_growth.first_total }} → {{ review_growth.latest_total }} reviews (sinds {{ review_growth.first_date }})</div>
-  </div>
-  {% endif %}
-</div>
-
-<div class="flex gap-8 mb-24">
-  <a href="{{ url_for('upload') }}" class="btn btn-ghost">↑ Upload CSV / Excel</a>
-  <a href="{{ url_for('run_page') }}" class="btn btn-primary">▶ Uitvoeren</a>
-  {% if input_count > 0 %}
-    <span class="badge b-orange" style="align-self:center;">{{ input_count }} bestand(en) klaar</span>
-  {% endif %}
-</div>
-
-<div class="grid-2">
-
-{% if last_run %}
-<div class="section">
-  <div class="sec-head">
-    <span>Laatste run</span>
-    <span class="badge {{ 'b-green' if last_run.modus == 'send' else 'b-dim' }}">{{ last_run.modus }}</span>
-  </div>
-  <table>
-    <tbody>
-      <tr><td class="text-dim" style="width:130px">Datum</td><td class="fw-600">{{ last_run.import_at|fmtdt }}</td></tr>
-      <tr><td class="text-dim">Gemaild</td><td class="text-ok fw-600">{{ last_run.gemaild }}</td></tr>
-      <tr><td class="text-dim">Overgeslagen</td><td class="text-dim">{{ last_run.overgeslagen }}</td></tr>
-      <tr><td class="text-dim">Rijen gelezen</td><td class="text-dim">{{ last_run.rijen_gelezen }}</td></tr>
-    </tbody>
-  </table>
-</div>
-{% endif %}
-
-<div class="section">
-  <div class="sec-head">
-    <span>Snelle acties</span>
-  </div>
-  <div style="padding:16px 20px; display:flex; flex-direction:column; gap:10px;">
-    <a href="{{ url_for('templates_list') }}" class="btn btn-ghost">✉ Beheer e-mail templates</a>
-    <a href="{{ url_for('google_reviews_page') }}" class="btn btn-ghost">★ Bekijk Google reviews</a>
-    <a href="{{ url_for('export_log') }}" class="btn btn-ghost">↓ Exporteer verzendlog</a>
-  </div>
-</div>
-
-</div>
-
-{% if review_snapshots %}
-<div class="section" style="margin-bottom:24px;">
-  <div class="sec-head">⭐ Google reviews — groei</div>
-  <div style="padding:20px;">
-    <canvas id="reviewChart" style="max-height:260px;"></canvas>
-  </div>
-</div>
-{% endif %}
-
-<div class="section">
-  <div class="sec-head">
-    <span>Recente activiteit</span>
-    <a href="{{ url_for('logs') }}" class="btn btn-ghost btn-sm">Alle logs →</a>
+  <div class="panel-body flush">
+    {% if recent %}
+    <table class="activity">
+      <thead>
+        <tr>
+          <th>Patiënt</th>
+          <th>E-mail</th>
+          <th>Status</th>
+          <th>Template</th>
+          <th style="text-align:right;">Verstuurd</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in recent %}
+        <tr>
+          <td><div class="name-cell">
+            <div class="name-avatar">{{ (r.naam)|initials }}</div>
+            {{ r.naam }}
+          </div></td>
+          <td class="mono">{{ r.email }}</td>
+          <td><span class="status-dot">Bezorgd</span></td>
+          <td class="text-3">{{ r.template_name or '—' }}</td>
+          <td class="mono" style="text-align:right;">{{ r.sent_at|fmtdt }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="padding:40px; text-align:center; color:var(--text-3);">
+      Nog geen mails verstuurd
+    </div>
+    {% endif %}
   </div>
   {% if recent %}
-  <table>
-    <thead>
-      <tr><th>Naam</th><th>E-mail</th><th>Verstuurd op</th></tr>
-    </thead>
-    <tbody>
-      {% for r in recent %}
-      {% set letter = r.naam[0].upper() if r.naam else '?' %}
-      {% set colors = ['#f28c00','#10b981','#0ea5e9','#8b5cf6','#ef4444','#f59e0b'] %}
-      {% set color = colors[loop.index0 % colors|length] %}
-      <tr>
-        <td>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div class="contact-avatar" style="background:{{ color }}; width:26px; height:26px; font-size:11px;">{{ letter }}</div>
-            {{ r.naam }}
-          </div>
-        </td>
-        <td class="text-dim mono">{{ r.email }}</td>
-        <td class="text-dim">{{ r.sent_at|fmtdt }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="empty">Nog geen mails verstuurd</div>
+  <div class="panel-foot">
+    <span>Toont {{ recent|length }} van {{ this_month if this_month else 0 }} deze maand</span>
+    <a href="{{ url_for('logs') }}" style="font-weight:500; color: var(--accent-h);">
+      Bekijk alle logs <svg class="ico" width="12" height="12" style="vertical-align:-1px;"><use href="#i-chevright"/></svg>
+    </a>
+  </div>
   {% endif %}
-</div>
+</section>
 
 {% endblock %}
+
 {% block scripts %}
 {% if review_snapshots %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -134,47 +276,69 @@
   const values = {{ review_snapshots | map(attribute='total') | list | tojson }};
   const baseline = {{ review_baseline | tojson }};
 
+  const ctx = document.getElementById('reviewChart').getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 220);
+  grad.addColorStop(0, 'rgba(224,122,0,0.18)');
+  grad.addColorStop(1, 'rgba(224,122,0,0.00)');
+
   const datasets = [{
     label: 'Google reviews',
     data: values,
-    borderColor: '#f28c00',
-    backgroundColor: 'rgba(242,140,0,0.08)',
-    borderWidth: 2.5,
-    pointRadius: 4,
-    pointBackgroundColor: '#f28c00',
+    borderColor: '#e07a00',
+    backgroundColor: grad,
+    borderWidth: 2,
+    pointRadius: 0,
+    pointHoverRadius: 5,
+    pointHoverBackgroundColor: '#e07a00',
+    pointHoverBorderColor: '#fff',
+    pointHoverBorderWidth: 2,
     fill: true,
-    tension: 0.3
+    tension: 0.35,
   }];
 
   if (baseline) {
     datasets.push({
       label: 'Startwaarde (' + baseline + ')',
       data: labels.map(() => parseInt(baseline)),
-      borderColor: '#cbd5e1',
-      borderWidth: 1.5,
-      borderDash: [6, 4],
+      borderColor: '#a39d95',
+      borderWidth: 1,
+      borderDash: [4, 4],
       pointRadius: 0,
       fill: false,
       tension: 0
     });
   }
 
-  new Chart(document.getElementById('reviewChart'), {
+  new Chart(ctx, {
     type: 'line',
     data: { labels, datasets },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 12 } } },
-        tooltip: { callbacks: {
-          label: ctx => ' ' + ctx.parsed.y + ' reviews'
-        }}
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#14110e',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          padding: 10,
+          titleFont: { family: 'DM Sans', weight: '600', size: 12 },
+          bodyFont: { family: 'JetBrains Mono', size: 11 },
+          displayColors: false,
+          callbacks: { label: ctx => ctx.parsed.y + ' reviews' }
+        }
       },
       scales: {
-        x: { ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+        x: {
+          ticks: { font: { family: 'DM Sans', size: 11 }, color: '#a39d95' },
+          grid: { display: false },
+          border: { color: '#ebe9e3' }
+        },
         y: {
-          ticks: { font: { size: 11 }, stepSize: 1 },
-          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#a39d95', stepSize: 2 },
+          grid: { color: '#f1efea' },
+          border: { display: false },
           suggestedMin: baseline ? parseInt(baseline) - 2 : undefined
         }
       }

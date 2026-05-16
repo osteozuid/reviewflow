@@ -7,7 +7,7 @@
 
 <form method="post" enctype="multipart/form-data" id="upform">
   <div class="dropzone" id="dz" onclick="document.getElementById('fi').click()">
-    <div class="dz-icon">☁</div>
+    <div class="dz-icon"><svg class="ico"><use href="#i-upload"/></svg></div>
     <div class="dz-text">Sleep bestanden hier of klik om te kiezen</div>
     <div class="dz-hint">Ondersteunde formaten: .csv, .xlsx, .xls (MyOrganizer / agenda export)</div>
   </div>
@@ -29,7 +29,7 @@
       {% for f in files %}
       <tr>
         <td>
-          <span style="font-size:16px; margin-right:8px;">📄</span>
+          <svg class="ico" style="margin-right:8px;"><use href="#i-download"/></svg>
           <span class="mono fw-600">{{ f.name }}</span>
         </td>
         <td class="text-dim">{{ f.size }}</td>
@@ -37,14 +37,14 @@
         <td style="text-align:right; padding-right:16px;">
           <a href="{{ url_for('delete_file', filename=f.name) }}"
              class="btn btn-danger btn-sm"
-             onclick="return confirm('{{ f.name }} verwijderen uit de wachtrij?')">✕ Verwijderen</a>
+             onclick="return confirm('{{ f.name }} verwijderen uit de wachtrij?')">Verwijderen</a>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   <div style="padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:10px; align-items:center;">
-    <a href="{{ url_for('run_page') }}" class="btn btn-primary">▶ Uitvoeren →</a>
+    <a href="{{ url_for('run_page') }}" class="btn btn-primary"><svg class="ico"><use href="#i-play"/></svg> Uitvoeren</a>
     <span class="text-dim" style="font-size:12px;">{{ files|length }} bestand(en) klaar voor verwerking</span>
   </div>
   {% else %}
