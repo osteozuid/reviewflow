@@ -1,0 +1,32 @@
+# Secrets
+.env
+*.env
+
+# Database
+*.db
+data/
+
+# Patiëntdata & uploads
+*.csv
+*.xlsx
+*.xls
+input/
+output/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Editor
+*.code-workspace
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+tests/
