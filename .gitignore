@@ -32,6 +32,7 @@ Thumbs.db
 # Tests
 tests/__pycache__/
 
-# Local utility scripts (keep only bootstrap_local_test.py)
+# Local utility scripts (keep only bootstrap scripts)
 scripts/*.py
 !scripts/bootstrap_local_test.py
+!scripts/bootstrap_staging.py
