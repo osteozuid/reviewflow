@@ -24,10 +24,10 @@
     </p>
   </div>
   <div class="range-tabs" role="tablist">
-    <button>7 dagen</button>
-    <button class="active">30 dagen</button>
-    <button>Dit jaar</button>
-    <button>Alles</button>
+    <a href="/?period=7d"    class="{{ 'active' if period == '7d' }}">7 dagen</a>
+    <a href="/?period=30d"   class="{{ 'active' if period == '30d' }}">30 dagen</a>
+    <a href="/?period=year"  class="{{ 'active' if period == 'year' }}">Dit jaar</a>
+    <a href="/?period=all"   class="{{ 'active' if period == 'all' }}">Alles</a>
   </div>
 </div>
 
@@ -38,11 +38,10 @@
       <svg class="ico"><use href="#i-send"/></svg>
       Verstuurd totaal
     </div>
-    <div class="stat-val">{{ "{:,}".format(total).replace(",", ".") if total else "—" }}</div>
-    <svg class="spark" viewBox="0 0 120 28" preserveAspectRatio="none" style="display:none;">
-      <path class="area" d="M0,24 L0,21 L15,19 L30,17 L45,16 L60,14 L75,11 L90,9 L105,7 L120,5 L120,28 L0,28 Z"/>
-      <path class="line" d="M0,21 L15,19 L30,17 L45,16 L60,14 L75,11 L90,9 L105,7 L120,5"/>
-    </svg>
+    <div class="stat-val">{{ "{:,}".format(period_count).replace(",", ".") if period_count else "0" }}</div>
+    {%- set sent_counts = sent_series | map(attribute='count') | list %}
+    <svg class="spark" data-spark="{{ sent_counts | tojson }}" viewBox="0 0 120 28" preserveAspectRatio="none" style="display:none;"></svg>
+    <span class="spark-empty" style="display:none;">Onvoldoende data</span>
     <div class="stat-foot">
       {% if delta_total %}
         <span class="delta {{ 'up' if delta_total > 0 else 'down' if delta_total < 0 else 'flat' }}">
@@ -60,10 +59,8 @@
       Deze maand
     </div>
     <div class="stat-val">{{ this_month if this_month else "0" }}</div>
-    <svg class="spark" viewBox="0 0 120 28" preserveAspectRatio="none" style="display:none;">
-      <path class="area" d="M0,20 L0,18 L20,22 L40,15 L60,12 L80,18 L100,9 L120,6 L120,28 L0,28 Z"/>
-      <path class="line" d="M0,18 L20,22 L40,15 L60,12 L80,18 L100,9 L120,6"/>
-    </svg>
+    <svg class="spark" data-spark="{{ sent_counts | tojson }}" viewBox="0 0 120 28" preserveAspectRatio="none" style="display:none;"></svg>
+    <span class="spark-empty" style="display:none;">Onvoldoende data</span>
     <div class="stat-foot">
       {% if delta_month %}
         <span class="delta {{ 'up' if delta_month > 0 else 'down' if delta_month < 0 else 'flat' }}">
@@ -81,10 +78,9 @@
       Reviews ontvangen
     </div>
     <div class="stat-val">{{ reviewed_count if reviewed_count else "0" }} <span class="unit">· {% if total > 0 %}{{ "%.1f" | format(reviewed_count / total * 100) }}%{% else %}—{% endif %}</span></div>
-    <svg class="spark" viewBox="0 0 120 28" preserveAspectRatio="none" style="display:none;">
-      <path class="area" d="M0,22 L0,20 L20,18 L40,17 L60,14 L80,12 L100,11 L120,9 L120,28 L0,28 Z"/>
-      <path class="line" d="M0,20 L20,18 L40,17 L60,14 L80,12 L100,11 L120,9"/>
-    </svg>
+    {%- set review_counts = review_snapshots | map(attribute='total') | list %}
+    <svg class="spark pos" data-spark="{{ review_counts | tojson }}" viewBox="0 0 120 28" preserveAspectRatio="none" style="display:none;"></svg>
+    <span class="spark-empty" style="display:none;">Onvoldoende data</span>
     <div class="stat-foot">
       {% if delta_review_rate %}
         <span class="delta {{ 'up' if delta_review_rate > 0 else 'down' if delta_review_rate < 0 else 'flat' }}">
@@ -129,11 +125,9 @@
         <div class="panel-sub">Sinds {{ review_snapshots[0].date if review_snapshots else '—' }}</div>
         {% endif %}
       </div>
-      <div class="range-tabs">
-        <button>30d</button>
-        <button class="active">90d</button>
-        <button>Alles</button>
-      </div>
+      <span class="pill" style="font-size:11px;opacity:0.7;">
+        {{ {'7d':'7 dagen','30d':'30 dagen','year':'Dit jaar','all':'Alles'}[period] }}
+      </span>
     </div>
     {% if review_snapshots %}
     <div class="chart-meta">
@@ -268,6 +262,47 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+(function () {
+  function buildSpark(el, counts) {
+    var empty = el.nextElementSibling;
+    if (!counts || counts.length < 2) {
+      if (empty && empty.classList.contains('spark-empty')) empty.style.display = '';
+      el.style.display = 'none';
+      return;
+    }
+    var W = 120, H = 28, pad = 2;
+    var max = Math.max.apply(null, counts);
+    var min = Math.min.apply(null, counts);
+    var range = max - min || 1;
+    var pts = counts.map(function (v, i) {
+      return [
+        (i / (counts.length - 1)) * W,
+        pad + (1 - (v - min) / range) * (H - pad * 2)
+      ];
+    });
+    var line = pts.map(function (p, i) {
+      return (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1);
+    }).join('');
+    var area = line + ' L' + W + ',' + H + ' L0,' + H + ' Z';
+    var ns = 'http://www.w3.org/2000/svg';
+    var pathArea = document.createElementNS(ns, 'path');
+    pathArea.setAttribute('class', 'area');
+    pathArea.setAttribute('d', area);
+    var pathLine = document.createElementNS(ns, 'path');
+    pathLine.setAttribute('class', 'line');
+    pathLine.setAttribute('d', line);
+    el.appendChild(pathArea);
+    el.appendChild(pathLine);
+    el.style.display = '';
+  }
+
+  document.querySelectorAll('svg.spark[data-spark]').forEach(function (el) {
+    try { buildSpark(el, JSON.parse(el.getAttribute('data-spark'))); } catch (e) {}
+  });
+})();
+</script>
+
 {% if review_snapshots %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>

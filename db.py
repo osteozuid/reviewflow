@@ -806,6 +806,90 @@ def get_review_growth(tenant_id, baseline=None):
     }
 
 
+# ─── Dashboard time-series helpers ───────────────────────────────────────────
+
+VALID_PERIODS = {'7d', '30d', 'year', 'all'}
+
+
+def _period_cutoff_sql(period):
+    """Returns SQL fragment for WHERE clause (no params needed — values are literals)."""
+    if period == '7d':
+        return "sent_at >= NOW() - interval '7 days'"
+    if period == '30d':
+        return "sent_at >= NOW() - interval '30 days'"
+    if period == 'year':
+        return "sent_at >= date_trunc('year', NOW())"
+    return None  # 'all' — no filter
+
+
+def get_sent_series(tenant_id, period='30d'):
+    """Returns [{date, count}] grouped by day for the selected period. Always tenant-scoped."""
+    cutoff = _period_cutoff_sql(period)
+    where = f"tenant_id = %s{f' AND {cutoff}' if cutoff else ''}"
+    with get_connection() as conn:
+        cur = _q(conn,
+            f"""SELECT DATE(sent_at) AS date, COUNT(*) AS count
+                FROM review_log
+                WHERE {where}
+                GROUP BY DATE(sent_at)
+                ORDER BY date""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [{'date': str(r['date']), 'count': r['count']} for r in rows]
+
+
+def get_sent_count_for_period(tenant_id, period='30d'):
+    """Total sent emails in the current period. Always tenant-scoped."""
+    cutoff = _period_cutoff_sql(period)
+    where = f"tenant_id = %s{f' AND {cutoff}' if cutoff else ''}"
+    with get_connection() as conn:
+        cur = _q(conn,
+            f"SELECT COUNT(*) AS cnt FROM review_log WHERE {where}",
+            (tenant_id,))
+        return cur.fetchone()['cnt']
+
+
+def get_sent_count_prev_period(tenant_id, period='30d'):
+    """Total sent emails in the previous equal-length period. Returns None for 'all'."""
+    if period == '7d':
+        sql = """SELECT COUNT(*) AS cnt FROM review_log WHERE tenant_id = %s
+                 AND sent_at >= NOW() - interval '14 days'
+                 AND sent_at <  NOW() - interval '7 days'"""
+    elif period == '30d':
+        sql = """SELECT COUNT(*) AS cnt FROM review_log WHERE tenant_id = %s
+                 AND sent_at >= NOW() - interval '60 days'
+                 AND sent_at <  NOW() - interval '30 days'"""
+    elif period == 'year':
+        sql = """SELECT COUNT(*) AS cnt FROM review_log WHERE tenant_id = %s
+                 AND sent_at >= date_trunc('year', NOW() - interval '1 year')
+                 AND sent_at <  date_trunc('year', NOW())"""
+    else:
+        return None
+    with get_connection() as conn:
+        cur = _q(conn, sql, (tenant_id,))
+        return cur.fetchone()['cnt']
+
+
+def get_review_snapshots_for_period(tenant_id, period='30d'):
+    """Returns review_snapshots filtered by period. Always tenant-scoped."""
+    if period == '7d':
+        date_filter = "AND date >= CURRENT_DATE - interval '7 days'"
+    elif period == '30d':
+        date_filter = "AND date >= CURRENT_DATE - interval '30 days'"
+    elif period == 'year':
+        date_filter = "AND date >= date_trunc('year', CURRENT_DATE)"
+    else:
+        date_filter = ''
+    with get_connection() as conn:
+        cur = _q(conn,
+            f"""SELECT date, total FROM review_snapshots
+                WHERE tenant_id = %s {date_filter}
+                ORDER BY date""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [{'date': str(r['date']), 'total': r['total']} for r in rows]
+
+
 # ─── Dashboard helpers ────────────────────────────────────────────────────────
 
 def get_dashboard_stats(tenant_id):

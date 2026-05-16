@@ -329,3 +329,78 @@ class TestUploadRunTenantAware:
         # Beide tenants hebben hun eigen run-state (active=False, lege lines)
         assert resp_a['active'] is False
         assert resp_b['active'] is False
+
+
+# ── 10. Dashboard sparklines en periodefilter ─────────────────────────────────
+
+@pytest.mark.requires_db
+class TestDashboardSparklines:
+    def test_dashboard_laadt_zonder_data(self, app_client, owner_a):
+        """Dashboard mag niet crashen als tenant geen verzenddata heeft."""
+        login_as(app_client, owner_a['email'], owner_a['_password'])
+        resp = app_client.get('/')
+        assert resp.status_code == 200
+
+    def test_dashboard_periodefilter_7d(self, app_client, owner_a):
+        login_as(app_client, owner_a['email'], owner_a['_password'])
+        resp = app_client.get('/?period=7d')
+        assert resp.status_code == 200
+        assert b'7 dagen' in resp.data
+
+    def test_dashboard_periodefilter_30d(self, app_client, owner_a):
+        login_as(app_client, owner_a['email'], owner_a['_password'])
+        resp = app_client.get('/?period=30d')
+        assert resp.status_code == 200
+        assert b'30 dagen' in resp.data
+
+    def test_dashboard_periodefilter_year(self, app_client, owner_a):
+        login_as(app_client, owner_a['email'], owner_a['_password'])
+        resp = app_client.get('/?period=year')
+        assert resp.status_code == 200
+        assert b'Dit jaar' in resp.data
+
+    def test_dashboard_periodefilter_all(self, app_client, owner_a):
+        login_as(app_client, owner_a['email'], owner_a['_password'])
+        resp = app_client.get('/?period=all')
+        assert resp.status_code == 200
+        assert b'Alles' in resp.data
+
+    def test_dashboard_ongeldige_periode_valt_terug_op_30d(self, app_client, owner_a):
+        login_as(app_client, owner_a['email'], owner_a['_password'])
+        resp = app_client.get('/?period=onzin')
+        assert resp.status_code == 200
+        assert b'30 dagen' in resp.data
+
+    def test_dashboard_met_verzenddata(self, app_client, db_module, owner_a, tenant_a):
+        """Dashboard toont echte sent_series als tenant data heeft."""
+        import uuid
+        patient = {'naam': 'Test Patient', 'email': f'patient-{uuid.uuid4().hex[:6]}@test.com',
+                   'geboortedatum': None}
+        db_module.log_sent(tenant_a['id'], [patient], 'test.csv')
+        login_as(app_client, owner_a['email'], owner_a['_password'])
+        resp = app_client.get('/?period=30d')
+        assert resp.status_code == 200
+        # sparkline data-spark attribuut aanwezig
+        assert b'data-spark' in resp.data
+
+    def test_sent_series_tenant_isolatie(self, app_client, db_module,
+                                          owner_a, owner_b, tenant_a, tenant_b):
+        """Tenant A zijn sent_series mag niet zichtbaar zijn voor tenant B."""
+        import uuid
+        patient = {'naam': 'Patiënt A', 'email': f'pa-{uuid.uuid4().hex[:6]}@test.com',
+                   'geboortedatum': None}
+        db_module.log_sent(tenant_a['id'], [patient], 'a.csv')
+
+        series_a = db_module.get_sent_series(tenant_a['id'], '30d')
+        series_b = db_module.get_sent_series(tenant_b['id'], '30d')
+
+        assert len(series_a) >= 1
+        assert len(series_b) == 0  # tenant B heeft geen data
+
+    def test_geen_globale_query_zonder_tenant_id(self, db_module, tenant_a, tenant_b):
+        """get_sent_series en get_sent_count_for_period vereisen tenant_id."""
+        import inspect
+        src = inspect.getsource(db_module.get_sent_series)
+        assert 'tenant_id' in src
+        src2 = inspect.getsource(db_module.get_sent_count_for_period)
+        assert 'tenant_id' in src2

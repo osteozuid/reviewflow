@@ -415,45 +415,43 @@ def invite_accept(token):
 @app.route('/')
 def dashboard():
     import db
-    from datetime import timedelta
     db.init_db()
     db.sync_contacts_from_log(g.tenant_id)
 
+    period = request.args.get('period', '30d')
+    if period not in db.VALID_PERIODS:
+        period = '30d'
+
     stats = db.get_dashboard_stats(g.tenant_id)
 
-    # Calculate deltas for 30-day comparison
+    # Period-aware sent count + delta
+    period_count = db.get_sent_count_for_period(g.tenant_id, period)
+    prev_count   = db.get_sent_count_prev_period(g.tenant_id, period)
+    delta_total  = get_delta(period_count, prev_count) if prev_count is not None else None
+
+    # Month-on-month delta for "Deze maand" card (always calendar-month comparison)
     with db.get_connection() as conn:
-        # Previous month total
         cur = db._q(conn,
-            """SELECT COUNT(*) as cnt FROM review_log
-               WHERE tenant_id = %s AND sent_at >= date_trunc('month', NOW() - interval '1 month')
-               AND sent_at < date_trunc('month', NOW())""",
+            """SELECT COUNT(*) AS cnt FROM review_log
+               WHERE tenant_id = %s
+               AND sent_at >= date_trunc('month', NOW() - interval '1 month')
+               AND sent_at <  date_trunc('month', NOW())""",
             (g.tenant_id,))
         prev_month = cur.fetchone()['cnt']
-
-        # Previous 30 days for sparkline
-        cur = db._q(conn,
-            """SELECT COUNT(*) as cnt FROM review_log
-               WHERE tenant_id = %s AND sent_at >= NOW() - interval '30 days'
-               AND sent_at < NOW() - interval '30 days'""",
-            (g.tenant_id,))
-        prev_30d_total = cur.fetchone()['cnt'] or 0
-
-    delta_total = get_delta(stats['total'], stats['total'] - stats['this_month'])
     delta_month = stats['this_month'] - prev_month
+
+    # review_rate delta: no per-date conversion tracking — show None honestly
     delta_review_rate = None
 
-    if stats['total'] > 0 and stats['reviewed_count'] is not None:
-        prev_reviewed = max(0, stats['reviewed_count'] - 10)  # Mock previous
-        current_rate = (stats['reviewed_count'] / stats['total']) * 100
-        prev_rate = (prev_reviewed / (stats['total'] - stats['this_month'])) * 100 if (stats['total'] - stats['this_month']) > 0 else 0
-        delta_review_rate = round(current_rate - prev_rate, 1)
+    # Sparkline series (period-aware, tenant-scoped)
+    sent_series = db.get_sent_series(g.tenant_id, period)
 
-    review_baseline = db.get_tenant_setting(g.tenant_id, 'review_baseline') or None
-    review_growth   = db.get_review_growth(g.tenant_id, baseline=review_baseline)
-    review_snapshots = db.get_review_snapshots(g.tenant_id)
+    # Review snapshots (period-aware for large chart)
+    review_baseline  = db.get_tenant_setting(g.tenant_id, 'review_baseline') or None
+    review_growth    = db.get_review_growth(g.tenant_id, baseline=review_baseline)
+    review_snapshots = db.get_review_snapshots_for_period(g.tenant_id, period)
 
-    if review_baseline and stats['first_sent_date']:
+    if period == 'all' and review_baseline and stats['first_sent_date']:
         start_date = stats['first_sent_date']
         if not review_snapshots or review_snapshots[0]['date'] > start_date:
             review_snapshots = [{'date': start_date,
@@ -468,19 +466,21 @@ def dashboard():
         if f.suffix.lower() in ALLOWED
     )
 
-    # Enrich recent rows with status and template_name
     for r in stats['recent']:
         r['status'] = 'delivered'
         r['status_label'] = 'Bezorgd'
         r['status_class'] = ''
-        r['template_name'] = stats['last_run'].get('modus', 'Standaard NL') if stats['last_run'] else None
+        r['template_name'] = stats['last_run'].get('bestand', '') if stats['last_run'] else None
 
     return render_template('dashboard.html',
+        period=period,
+        period_count=period_count,
         total=stats['total'],
         this_month=stats['this_month'],
         delta_total=delta_total,
         delta_month=delta_month,
         delta_review_rate=delta_review_rate,
+        sent_series=sent_series,
         last_run=stats['last_run'],
         recent=stats['recent'],
         reviewed_count=stats['reviewed_count'],
