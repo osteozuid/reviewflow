@@ -4,7 +4,7 @@
 
 <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
 <style>
-  .ql-toolbar.ql-snow { border:1px solid var(--border); border-bottom:none; border-radius:var(--r) var(--r) 0 0; background:var(--surface2); }
+  .ql-toolbar.ql-snow { border:1px solid var(--border); border-bottom:none; border-radius:var(--r) var(--r) 0 0; background:var(--surface-2); }
   .ql-container.ql-snow { border:1px solid var(--border); border-radius:0 0 var(--r) var(--r); font-family:Calibri,Arial,sans-serif; font-size:14px; }
   .ql-editor { min-height:360px; line-height:1.7; }
   .ql-editor p { margin:0 0 12px; }
@@ -27,7 +27,7 @@
 </style>
 
 <div class="flex gap-12 align-center mb-24">
-  <a href="{{ url_for('templates_list') }}" class="btn btn-ghost btn-sm">← Terug</a>
+  <a href="{{ url_for('templates_list') }}" class="btn btn-ghost btn-sm"><svg class="ico"><use href="#i-chevright"/></svg> Terug</a>
   <div class="ptitle" style="margin:0;">{{ 'Template bewerken' if template else 'Nieuwe template' }}</div>
 </div>
 
@@ -53,16 +53,16 @@
 
   <div class="section mb-24">
     <div class="editor-tabs">
-      <div class="editor-tab active" id="tab-visual"  onclick="switchTab('visual')">✏ Visueel</div>
-      <div class="editor-tab" id="tab-html"            onclick="switchTab('html')">⟨/⟩ HTML</div>
-      <div class="editor-tab" id="tab-preview"         onclick="switchTab('preview')">👁 Preview</div>
-      {% if template %}<div class="editor-tab" id="tab-testmail" onclick="switchTab('testmail')">📧 Testmail</div>{% endif %}
+      <div class="editor-tab active" id="tab-visual"  onclick="switchTab('visual')">Visueel</div>
+      <div class="editor-tab" id="tab-html"            onclick="switchTab('html')">HTML</div>
+      <div class="editor-tab" id="tab-preview"         onclick="switchTab('preview')"><svg class="ico"><use href="#i-help"/></svg> Preview</div>
+      {% if template %}<div class="editor-tab" id="tab-testmail" onclick="switchTab('testmail')"><svg class="ico"><use href="#i-mail"/></svg> Testmail</div>{% endif %}
     </div>
 
     <!-- VISUEEL -->
     <div class="editor-pane active" id="pane-visual" style="padding:20px;">
       <div class="alert alert-info mb-16">
-        <span>ℹ</span>
+        <svg class="ico"><use href="#i-help"/></svg>
         <span>Gebruik de opmaakbalk voor opmaak. De oranje knoppen <strong>{ Naam }</strong>, <strong>{ Review ↗ }</strong> en <strong>{ Logo }</strong> voegen automatisch de juiste gegevens in.</span>
       </div>
       <div id="quill-editor"></div>
@@ -71,7 +71,7 @@
     <!-- HTML -->
     <div class="editor-pane" id="pane-html" style="padding:20px;">
       <div class="alert alert-info mb-16">
-        <span>ℹ</span>
+        <svg class="ico"><use href="#i-help"/></svg>
         <span>Volledige HTML. Variabelen: <code>{{voornaam}}</code>, <code>{{google_link}}</code>, <code>{{logo}}</code>.</span>
       </div>
       <textarea id="html-editor" name="body_html" class="w-full"
@@ -82,11 +82,11 @@
     <!-- PREVIEW -->
     <div class="editor-pane" id="pane-preview" style="padding:20px;">
       <div class="alert alert-info mb-16">
-        <span>ℹ</span>
+        <svg class="ico"><use href="#i-help"/></svg>
         <span>Preview met voorbeelddata: voornaam = <strong>Jan</strong>.</span>
       </div>
       <div style="border:1px solid var(--border); border-radius:var(--r); overflow:hidden;">
-        <div style="padding:8px 16px; background:var(--surface2); border-bottom:1px solid var(--border); font-size:12px; color:var(--text-dim);">
+        <div style="padding:8px 16px; background:var(--surface-2); border-bottom:1px solid var(--border); font-size:12px; color:var(--text-dim);">
           Preview e-mail
         </div>
         <iframe id="preview-frame" style="width:100%; height:500px; border:none; background:#fff;"
@@ -98,7 +98,7 @@
     {% if template %}
     <div class="editor-pane" id="pane-testmail" style="padding:20px;">
       <div class="alert alert-info mb-16">
-        <span>ℹ</span>
+        <svg class="ico"><use href="#i-help"/></svg>
         <span>Stuur deze template als test. Voornaam wordt <strong>Jan (Test)</strong> en het onderwerp krijgt het voorvoegsel <strong>[TEST]</strong>.</span>
       </div>
       <div style="max-width:480px;">

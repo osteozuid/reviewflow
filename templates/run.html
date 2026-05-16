@@ -7,7 +7,7 @@
 
 {% if send_geblokkeerd %}
 <div class="alert alert-warning mb-24">
-  <span>🔒</span>
+  <svg class="ico"><use href="#i-ban"/></svg>
   <strong>Versturen is geblokkeerd (testmodus actief).</strong>
   Ga naar <a href="{{ url_for('settings') }}" style="color:var(--warning);">Instellingen</a> om dit uit te schakelen.
 </div>
@@ -17,7 +17,7 @@
   <form method="post" action="{{ url_for('run_start') }}" class="run-form">
     <input type="hidden" name="modus" value="dry">
     <button type="submit" class="run-card">
-      <div class="rc-icon">🔍</div>
+      <div class="rc-icon"><svg class="ico"><use href="#i-search"/></svg></div>
       <div class="rc-title">Dry Run</div>
       <div class="rc-desc">Analyseer wie een mail zou krijgen.<br>Geen mails worden verstuurd.</div>
     </button>
@@ -26,8 +26,8 @@
   <form method="post" action="{{ url_for('run_start') }}" class="run-form">
     <input type="hidden" name="modus" value="test">
     <input type="hidden" name="test_email" value="{{ admin }}">
-    <button type="submit" class="run-card c-orange">
-      <div class="rc-icon">🧪</div>
+    <button type="submit" class="run-card">
+      <div class="rc-icon"><svg class="ico"><use href="#i-mail"/></svg></div>
       <div class="rc-title">Test versturen</div>
       <div class="rc-desc">Stuurt alle mails naar:<br><span class="mono" style="color:var(--accent);">{{ admin }}</span></div>
     </button>
@@ -36,8 +36,8 @@
   <form method="post" action="{{ url_for('run_start') }}" class="run-form"
         onsubmit="return confirm('Echte mails versturen naar patiënten?\n\nDit kan niet ongedaan worden gemaakt.')">
     <input type="hidden" name="modus" value="send">
-    <button type="submit" class="run-card c-green" {% if send_geblokkeerd %}disabled style="opacity:.5;cursor:not-allowed;"{% endif %}>
-      <div class="rc-icon">📨</div>
+    <button type="submit" class="run-card" {% if send_geblokkeerd %}disabled style="opacity:.5;cursor:not-allowed;"{% endif %}>
+      <div class="rc-icon"><svg class="ico"><use href="#i-send"/></svg></div>
       <div class="rc-title">Versturen</div>
       <div class="rc-desc">Verstuurt echte mails naar patiënten.<br>Database wordt bijgewerkt.</div>
     </button>

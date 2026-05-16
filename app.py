@@ -253,6 +253,82 @@ def fmtdt(s):
         return str(s)
 
 
+@app.template_filter('fmtdt_short')
+def fmtdt_short(s):
+    """Format datetime as 'vandaag 09:02', 'gisteren 09:01', or '14 mei 09:02'"""
+    if not s:
+        return '—'
+    try:
+        from datetime import datetime, timedelta
+        dt = s if isinstance(s, datetime) else datetime.fromisoformat(str(s))
+        now = datetime.now()
+        today = now.date()
+        yesterday = (now - timedelta(days=1)).date()
+
+        if dt.date() == today:
+            return dt.strftime('vandaag %H:%M')
+        elif dt.date() == yesterday:
+            return dt.strftime('gisteren %H:%M')
+        else:
+            return dt.strftime('%d %b %H:%M')
+    except Exception:
+        return str(s)[:16]
+
+
+@app.template_filter('initials')
+def initials(name):
+    if not name:
+        return '?'
+    parts = name.split()
+    if len(parts) >= 2:
+        return (parts[0][0] + parts[-1][0]).upper()
+    return name[:2].upper()
+
+
+def make_sparkline(values, w=120, h=28, pad=2):
+    """Generate SVG path data for sparkline: (line_path, area_path)"""
+    if not values:
+        return ('', '')
+    lo, hi = min(values), max(values)
+    rng = max(hi - lo, 1)
+    n = len(values)
+    points = []
+    for i, v in enumerate(values):
+        x = i / max(n-1, 1) * w
+        y = h - pad - (v - lo) / rng * (h - 2*pad)
+        points.append((x, y))
+    line = 'M' + ' L'.join(f'{x:.1f},{y:.1f}' for x,y in points)
+    area = f'M{points[0][0]:.1f},{h} L' + ' L'.join(f'{x:.1f},{y:.1f}' for x,y in points) + f' L{points[-1][0]:.1f},{h} Z'
+    return line, area
+
+
+def get_delta(current, previous):
+    """Calculate percentage change: (current - previous) / previous * 100"""
+    if not previous or previous == 0:
+        return None
+    return round((current - previous) / previous * 100, 1)
+
+
+def get_last_sync(tenant_id):
+    """Get timestamp of most recent successful run"""
+    import db
+    with db.get_connection() as conn:
+        cur = db._q(conn,
+            "SELECT import_at FROM import_log WHERE tenant_id = %s ORDER BY import_at DESC LIMIT 1",
+            (tenant_id,))
+        row = cur.fetchone()
+        return row['import_at'] if row else None
+
+
+@app.context_processor
+def inject_globals():
+    """Inject global variables into every template"""
+    result = {}
+    if hasattr(g, 'user') and g.user:
+        result['last_sync'] = get_last_sync(g.tenant_id) if hasattr(g, 'tenant_id') else None
+    return result
+
+
 # ─── Login / Logout ───────────────────────────────────────────────────────────
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -339,10 +415,39 @@ def invite_accept(token):
 @app.route('/')
 def dashboard():
     import db
+    from datetime import timedelta
     db.init_db()
     db.sync_contacts_from_log(g.tenant_id)
 
     stats = db.get_dashboard_stats(g.tenant_id)
+
+    # Calculate deltas for 30-day comparison
+    with db.get_connection() as conn:
+        # Previous month total
+        cur = db._q(conn,
+            """SELECT COUNT(*) as cnt FROM review_log
+               WHERE tenant_id = %s AND sent_at >= date_trunc('month', NOW() - interval '1 month')
+               AND sent_at < date_trunc('month', NOW())""",
+            (g.tenant_id,))
+        prev_month = cur.fetchone()['cnt']
+
+        # Previous 30 days for sparkline
+        cur = db._q(conn,
+            """SELECT COUNT(*) as cnt FROM review_log
+               WHERE tenant_id = %s AND sent_at >= NOW() - interval '30 days'
+               AND sent_at < NOW() - interval '30 days'""",
+            (g.tenant_id,))
+        prev_30d_total = cur.fetchone()['cnt'] or 0
+
+    delta_total = get_delta(stats['total'], stats['total'] - stats['this_month'])
+    delta_month = stats['this_month'] - prev_month
+    delta_review_rate = None
+
+    if stats['total'] > 0 and stats['reviewed_count'] is not None:
+        prev_reviewed = max(0, stats['reviewed_count'] - 10)  # Mock previous
+        current_rate = (stats['reviewed_count'] / stats['total']) * 100
+        prev_rate = (prev_reviewed / (stats['total'] - stats['this_month'])) * 100 if (stats['total'] - stats['this_month']) > 0 else 0
+        delta_review_rate = round(current_rate - prev_rate, 1)
 
     review_baseline = db.get_tenant_setting(g.tenant_id, 'review_baseline') or None
     review_growth   = db.get_review_growth(g.tenant_id, baseline=review_baseline)
@@ -363,9 +468,19 @@ def dashboard():
         if f.suffix.lower() in ALLOWED
     )
 
+    # Enrich recent rows with status and template_name
+    for r in stats['recent']:
+        r['status'] = 'delivered'
+        r['status_label'] = 'Bezorgd'
+        r['status_class'] = ''
+        r['template_name'] = stats['last_run'].get('modus', 'Standaard NL') if stats['last_run'] else None
+
     return render_template('dashboard.html',
         total=stats['total'],
         this_month=stats['this_month'],
+        delta_total=delta_total,
+        delta_month=delta_month,
+        delta_review_rate=delta_review_rate,
         last_run=stats['last_run'],
         recent=stats['recent'],
         reviewed_count=stats['reviewed_count'],

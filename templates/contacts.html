@@ -6,8 +6,8 @@
 <div class="ptitle-sub">Alle patiënten die ooit een review request ontvangen hebben.</div>
 
 <div class="flex gap-8 mb-16" style="flex-wrap:wrap; align-items:center;">
-  <a href="{{ url_for('contacts_export_csv') }}" class="btn btn-ghost">↓ Exporteer CSV</a>
-  <a href="{{ url_for('contacts_export_xlsx') }}" class="btn btn-ghost">↓ Exporteer Excel</a>
+  <a href="{{ url_for('contacts_export_csv') }}" class="btn btn-ghost"><svg class="ico"><use href="#i-download"/></svg> Exporteer CSV</a>
+  <a href="{{ url_for('contacts_export_xlsx') }}" class="btn btn-ghost"><svg class="ico"><use href="#i-download"/></svg> Exporteer Excel</a>
   <span class="badge b-dim" style="align-self:center;" id="contact-count">{{ contacts|length }} contacten</span>
   <input type="text" id="contact-search" placeholder="Zoek op naam of e-mail…"
     style="margin-left:auto; padding:6px 12px; border:1px solid #ddd; border-radius:6px; font-size:14px; width:240px;">
