@@ -29,6 +29,7 @@ app.jinja_env.globals['APP_NAME'] = config.APP_NAME
 
 APP_NAME     = config.APP_NAME
 APP_BASE_URL = config.APP_BASE_URL.rstrip('/')
+CSS_VERSION  = '4'  # bump on each static asset deploy
 
 ALLOWED = {'.csv', '.xlsx', '.xls'}
 
@@ -322,8 +323,7 @@ def get_last_sync(tenant_id):
 
 @app.context_processor
 def inject_globals():
-    """Inject global variables into every template"""
-    result = {}
+    result = {'css_v': CSS_VERSION}
     if hasattr(g, 'user') and g.user:
         result['last_sync'] = get_last_sync(g.tenant_id) if hasattr(g, 'tenant_id') else None
     return result
@@ -416,6 +416,11 @@ def invite_accept(token):
 def dashboard():
     import db
     db.init_db()
+
+    # Superadmin has no tenant — send to tenant management
+    if g.user and g.user.get('role') == 'superadmin':
+        return redirect(url_for('admin_tenants'))
+
     db.sync_contacts_from_log(g.tenant_id)
 
     period = request.args.get('period', '30d')
