@@ -232,6 +232,15 @@ def fmtdt(s):
     except Exception:
         return str(s)
 
+@app.template_filter('initials')
+def initials(s):
+    if not s:
+        return '?'
+    parts = s.strip().split()
+    if len(parts) >= 2:
+        return (parts[0][0] + parts[-1][0]).upper()
+    return s[0].upper() if s else '?'
+
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 @app.route('/')
