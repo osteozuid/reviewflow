@@ -19,7 +19,7 @@
     <div class="tpl-card-title">{{ tpl.naam }}</div>
     <div class="tpl-card-sub">
       <strong>Onderwerp:</strong> {{ tpl.onderwerp }}<br>
-      <span class="text-dim">Aangemaakt: {{ tpl.aangemaakt_op.strftime('%Y-%m-%d') if tpl.aangemaakt_op else '—' }}</span>
+      <span class="text-dim">Aangemaakt: {{ tpl.aangemaakt_op[:10] if tpl.aangemaakt_op else '—' }}</span>
     </div>
 
     <div class="flex gap-8" style="flex-wrap:wrap;">
