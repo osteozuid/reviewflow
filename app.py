@@ -6,109 +6,76 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from dotenv import load_dotenv
-from flask import (Flask, abort, flash, g, jsonify, redirect,
-                   render_template, request, send_file, session, url_for, Response)
+from functools import wraps
+
+from flask import (Flask, render_template, request, redirect,
+                   url_for, flash, jsonify, send_file, Response, session)
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-
-load_dotenv()
 
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
-import config
-
 app = Flask(__name__)
-app.secret_key = config.SECRET_KEY
+app.secret_key = os.environ.get('SECRET_KEY', 'reviewflow-change-in-prod')
 app.jinja_env.globals['enumerate'] = enumerate
-app.jinja_env.globals['PLATFORM_NAME'] = config.PLATFORM_NAME
-app.jinja_env.globals['TOOL_NAME'] = config.TOOL_NAME
-app.jinja_env.globals['APP_NAME'] = config.APP_NAME
 
-APP_NAME     = config.APP_NAME
-APP_BASE_URL = config.APP_BASE_URL.rstrip('/')
+INPUT_DIR  = ROOT / 'input'
+OUTPUT_DIR = ROOT / 'output'
+UPLOAD_DIR = ROOT / 'static' / 'uploads'
+INPUT_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED = {'.csv', '.xlsx', '.xls'}
 
-
-def get_tenant_input_dir(tenant_id):
-    d = ROOT / 'input' / str(tenant_id)
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+# ─── Run state (in-memory) ────────────────────────────────────────────────────
+_run = {'active': False, 'lines': [], 'done': False, 'modus': None, 'counts': {}}
+_lock = threading.Lock()
 
 
-def get_tenant_output_dir(tenant_id):
-    d = ROOT / 'output' / str(tenant_id)
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def get_tenant_upload_dir(tenant_id):
-    d = ROOT / 'static' / 'uploads' / str(tenant_id)
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-# ─── Run state (per tenant) ───────────────────────────────────────────────────
-_runs = {}
-_run_lock = threading.Lock()
-
-
-def _get_run(tenant_id):
-    with _run_lock:
-        if tenant_id not in _runs:
-            _runs[tenant_id] = {
-                'active': False, 'lines': [], 'done': False,
-                'modus': None, 'counts': {},
-            }
-        return _runs[tenant_id]
-
-
-def _log(tenant_id, msg):
+def _log(msg):
     ts = datetime.now().strftime('%H:%M:%S')
-    run = _get_run(tenant_id)
-    with _run_lock:
-        run['lines'].append(f'[{ts}]  {msg}')
+    with _lock:
+        _run['lines'].append(f'[{ts}]  {msg}')
 
 
-def do_run(tenant_id, modus, test_email=None):
-    import db
+def do_run(modus, test_email=None):
+    from db import (init_db, get_already_sent, get_blocked, get_blocked_names,
+                    get_reviewed_names, log_sent, log_import, export_review_log,
+                    get_app_setting, get_active_template)
     from csv_import import load_all_csv
     from dedup import deduplicate, matches_reviewed
     from mailer import get_smtp_config, send_review_request
 
-    run = _get_run(tenant_id)
-    with _run_lock:
-        run.update({'active': True, 'lines': [], 'done': False,
-                    'modus': modus, 'counts': {}})
-
-    input_dir  = get_tenant_input_dir(tenant_id)
-    output_dir = get_tenant_output_dir(tenant_id)
-
+    with _lock:
+        _run.update({'active': True, 'lines': [], 'done': False,
+                     'modus': modus, 'counts': {}})
     try:
-        db.init_db()
+        init_db()
 
+        # Check if real send is blocked
         if modus == 'send':
-            geblokkeerd = db.get_tenant_setting(tenant_id, 'send_geblokkeerd', '0')
+            geblokkeerd = get_app_setting('send_geblokkeerd', '0')
             if geblokkeerd == '1':
-                _log(tenant_id, 'GEBLOKKEERD: Versturen is uitgeschakeld in Instellingen.')
-                _log(tenant_id, 'Zet "Versturen geblokkeerd" uit in Instellingen om echte mails te sturen.')
+                _log('GEBLOKKEERD: Versturen is uitgeschakeld in Instellingen (testmodus actief).')
+                _log('Zet "Versturen geblokkeerd" uit in Instellingen om echte mails te sturen.')
                 return
 
-        _log(tenant_id, 'Bestanden laden...')
+        _log('Bestanden laden...')
         try:
-            all_rows, load_stats = load_all_csv(input_dir)
+            all_rows, load_stats = load_all_csv(INPUT_DIR)
         except FileNotFoundError:
-            _log(tenant_id, 'Geen bestanden gevonden — upload eerst een CSV of Excel.')
+            _log('Geen bestanden gevonden — upload eerst een CSV of Excel.')
             return
 
         candidates, skip_stats = deduplicate(all_rows)
-        already_sent   = db.get_already_sent(tenant_id)
-        blocked_emails = db.get_blocked(tenant_id)
-        blocked_names  = db.get_blocked_names(tenant_id)
-        reviewed       = db.get_reviewed_names(tenant_id)
+        already_sent = get_already_sent()
+        blocked_emails = get_blocked()
+        blocked_names = get_blocked_names()
+        reviewed = get_reviewed_names()
 
         to_mail, skipped = [], []
         for c in candidates:
@@ -126,51 +93,50 @@ def do_run(tenant_id, modus, test_email=None):
                     to_mail.append(c)
 
         total_gelezen = sum(s['rijen_gelezen'] for s in load_stats)
-        _log(tenant_id, f'{total_gelezen} rijen gelezen uit {len(load_stats)} bestand(en)')
-        _log(tenant_id, f'{len(to_mail)} te mailen  ·  {len(skipped)} overgeslagen')
+        _log(f'{total_gelezen} rijen gelezen uit {len(load_stats)} bestand(en)')
+        _log(f'{len(to_mail)} te mailen  ·  {len(skipped)} overgeslagen')
 
         verzonden, gefaald = [], []
 
         if modus == 'dry':
             for p in to_mail:
-                _log(tenant_id, f'[DRY]  {p["naam"]}  <{p["email"]}>')
-            _log(tenant_id, '─' * 40)
-            _log(tenant_id, 'DRY RUN klaar — geen mails verstuurd')
+                _log(f'[DRY]  {p["naam"]}  <{p["email"]}>')
+            _log('─' * 40)
+            _log('DRY RUN klaar — geen mails verstuurd')
 
         else:
-            cfg = get_smtp_config(tenant_id)
-            active_template = db.get_active_template(tenant_id)
+            cfg = get_smtp_config()
+            active_template = get_active_template()
             if modus == 'test':
-                _log(tenant_id, f'TEST modus — alle mails → {test_email}')
+                _log(f'TEST modus — alle mails → {test_email}')
             if active_template:
-                _log(tenant_id, f'Template: "{active_template["naam"]}"')
-            _log(tenant_id, '─' * 40)
+                _log(f'Template: "{active_template["naam"]}"')
+            _log('─' * 40)
 
             for patient in to_mail:
                 try:
                     target = {**patient, 'email': test_email} if modus == 'test' else patient
                     send_review_request(target, cfg, template=active_template)
                     if modus == 'send':
-                        db.log_sent(tenant_id, [patient], bestand=patient['bestand'])
+                        log_sent([patient], bestand=patient['bestand'])
                     verzonden.append(patient)
-                    _log(tenant_id, f'✓  {patient["naam"]}  <{patient["email"]}>')
+                    _log(f'✓  {patient["naam"]}  <{patient["email"]}>')
                     time.sleep(8)
                 except Exception as e:
                     gefaald.append(patient)
-                    _log(tenant_id, f'✗  {patient["naam"]}  —  {e}')
+                    _log(f'✗  {patient["naam"]}  —  {e}')
 
-            _log(tenant_id, '─' * 40)
+            _log('─' * 40)
             if modus == 'send' and verzonden:
-                db.export_review_log(tenant_id, output_dir / 'verzonden.csv')
-                _log(tenant_id, 'verzonden.csv bijgewerkt')
+                export_review_log(OUTPUT_DIR / 'verzonden.csv')
+                _log('verzonden.csv bijgewerkt')
 
             all_ov = sum(
                 s.get('rijen_leeg', 0) + s.get('rijen_fout_type', 0) +
                 s.get('rijen_geen_naam', 0) + s.get('rijen_geen_email', 0) +
                 s.get('rijen_ongeldig_email', 0) for s in load_stats
             )
-            db.log_import(
-                tenant_id=tenant_id,
+            log_import(
                 bestand=', '.join(s['bestand'] for s in load_stats),
                 rijen_gelezen=total_gelezen,
                 rijen_ok=sum(s['rijen_ok'] for s in load_stats),
@@ -181,8 +147,8 @@ def do_run(tenant_id, modus, test_email=None):
                 modus=modus,
             )
 
-        with _run_lock:
-            run['counts'] = {
+        with _lock:
+            _run['counts'] = {
                 'kandidaten': len(to_mail),
                 'overgeslagen': len(skipped),
                 'verzonden': len(verzonden),
@@ -190,25 +156,24 @@ def do_run(tenant_id, modus, test_email=None):
             }
 
     except Exception as e:
-        _log(tenant_id, f'FOUT: {e}')
+        _log(f'FOUT: {e}')
     finally:
-        with _run_lock:
-            run['done']   = True
-            run['active'] = False
+        with _lock:
+            _run['done'] = True
+            _run['active'] = False
 
 
-# ─── Scheduler (per tenant) ───────────────────────────────────────────────────
+# ─── Scheduler ────────────────────────────────────────────────────────────────
 DAGEN = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 scheduler = BackgroundScheduler(timezone='Europe/Brussels')
 scheduler.start()
 
 
-def reload_schedule(tenant_id):
-    import db
-    job_id = f'auto_{tenant_id}'
-    if scheduler.get_job(job_id):
-        scheduler.remove_job(job_id)
-    cfg = db.get_schedule_config(tenant_id)
+def reload_schedule():
+    from db import get_schedule_config
+    if scheduler.get_job('auto'):
+        scheduler.remove_job('auto')
+    cfg = get_schedule_config()
     if not cfg or not cfg['actief'] or cfg['modus'] == 'manual':
         return
     h, m = cfg['tijdstip'].split(':')
@@ -217,295 +182,111 @@ def reload_schedule(tenant_id):
                               hour=int(h), minute=int(m))
     else:
         trigger = CronTrigger(hour=int(h), minute=int(m))
-    scheduler.add_job(
-        lambda: do_run(tenant_id, 'send'), trigger,
-        id=job_id, name=f'Auto verzending tenant {tenant_id}', replace_existing=True,
-    )
+    scheduler.add_job(lambda: do_run('send'), trigger, id='auto',
+                      name='Auto verzending', replace_existing=True)
 
 
-# ─── Auth + request context ───────────────────────────────────────────────────
+# ─── Auth ────────────────────────────────────────────────────────────────────
 @app.before_request
-def load_user():
-    import db
-    open_endpoints = {'login', 'logout', 'invite_accept', 'static'}
-    g.user      = None
-    g.tenant_id = None
-    g.tenant    = None
-
-    user_id = session.get('user_id')
-    if user_id:
-        g.user = db.get_user_by_id(user_id)
-        if g.user and g.user.get('tenant_id'):
-            g.tenant_id = g.user['tenant_id']
-            g.tenant    = db.get_tenant(g.tenant_id)
-
-    if request.endpoint not in open_endpoints and not g.user:
+def require_login():
+    open_endpoints = {'login', 'logout', 'static'}
+    if request.endpoint not in open_endpoints and not session.get('logged_in'):
         return redirect(url_for('login', next=request.path))
 
 
+def _check_password(entered, stored):
+    """Verify password — supports both hashed (werkzeug) and plain text (legacy)."""
+    if stored.startswith('pbkdf2:') or stored.startswith('scrypt:'):
+        return check_password_hash(stored, entered)
+    return entered == stored
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    from db import get_app_setting
+    if session.get('logged_in'):
+        return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        stored = get_app_setting('app_password') or os.getenv('APP_PASSWORD', 'reviewflow2024')
+        if _check_password(password, stored):
+            session['logged_in'] = True
+            return redirect(request.args.get('next') or url_for('dashboard'))
+        flash('Verkeerd wachtwoord', 'error')
+    return render_template('login.html')
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+
+# ─── Template filter ──────────────────────────────────────────────────────────
 @app.template_filter('fmtdt')
 def fmtdt(s):
     if not s:
         return '—'
     try:
-        return str(s)[:16].replace('T', ' ')
+        return s[:16].replace('T', ' ')
     except Exception:
         return str(s)
 
 
-@app.template_filter('fmtdt_short')
-def fmtdt_short(s):
-    """Format datetime as 'vandaag 09:02', 'gisteren 09:01', or '14 mei 09:02'"""
-    if not s:
-        return '—'
-    try:
-        from datetime import datetime, timedelta
-        dt = s if isinstance(s, datetime) else datetime.fromisoformat(str(s))
-        now = datetime.now()
-        today = now.date()
-        yesterday = (now - timedelta(days=1)).date()
-
-        if dt.date() == today:
-            return dt.strftime('vandaag %H:%M')
-        elif dt.date() == yesterday:
-            return dt.strftime('gisteren %H:%M')
-        else:
-            return dt.strftime('%d %b %H:%M')
-    except Exception:
-        return str(s)[:16]
-
-
-@app.template_filter('initials')
-def initials(name):
-    if not name:
-        return '?'
-    parts = name.split()
-    if len(parts) >= 2:
-        return (parts[0][0] + parts[-1][0]).upper()
-    return name[:2].upper()
-
-
-def make_sparkline(values, w=120, h=28, pad=2):
-    """Generate SVG path data for sparkline: (line_path, area_path)"""
-    if not values:
-        return ('', '')
-    lo, hi = min(values), max(values)
-    rng = max(hi - lo, 1)
-    n = len(values)
-    points = []
-    for i, v in enumerate(values):
-        x = i / max(n-1, 1) * w
-        y = h - pad - (v - lo) / rng * (h - 2*pad)
-        points.append((x, y))
-    line = 'M' + ' L'.join(f'{x:.1f},{y:.1f}' for x,y in points)
-    area = f'M{points[0][0]:.1f},{h} L' + ' L'.join(f'{x:.1f},{y:.1f}' for x,y in points) + f' L{points[-1][0]:.1f},{h} Z'
-    return line, area
-
-
-def get_delta(current, previous):
-    """Calculate percentage change: (current - previous) / previous * 100"""
-    if not previous or previous == 0:
-        return None
-    return round((current - previous) / previous * 100, 1)
-
-
-def get_last_sync(tenant_id):
-    """Get timestamp of most recent successful run"""
-    import db
-    with db.get_connection() as conn:
-        cur = db._q(conn,
-            "SELECT import_at FROM import_log WHERE tenant_id = %s ORDER BY import_at DESC LIMIT 1",
-            (tenant_id,))
-        row = cur.fetchone()
-        return row['import_at'] if row else None
-
-
-@app.context_processor
-def inject_globals():
-    """Inject global variables into every template"""
-    result = {}
-    if hasattr(g, 'user') and g.user:
-        result['last_sync'] = get_last_sync(g.tenant_id) if hasattr(g, 'tenant_id') else None
-    return result
-
-
-# ─── Login / Logout ───────────────────────────────────────────────────────────
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    import db
-    from auth import verify_password
-    if g.user:
-        return redirect(url_for('dashboard'))
-    if request.method == 'POST':
-        email    = request.form.get('email', '').strip().lower()
-        password = request.form.get('password', '')
-        user = db.get_user_by_email(email)
-        if user and verify_password(password, user['password_hash']):
-            session.clear()
-            session['user_id'] = user['id']
-            db.update_user_last_login(user['id'])
-            db.log_audit('login', user_id=user['id'],
-                         tenant_id=user.get('tenant_id'), ip=request.remote_addr)
-            return redirect(request.args.get('next') or url_for('dashboard'))
-        flash('Ongeldig e-mailadres of wachtwoord', 'error')
-    return render_template('login.html', app_name=APP_NAME)
-
-
-@app.route('/logout')
-def logout():
-    import db
-    if g.user:
-        db.log_audit('logout', user_id=g.user['id'],
-                     tenant_id=g.user.get('tenant_id'), ip=request.remote_addr)
-    session.clear()
-    return redirect(url_for('login'))
-
-
-# ─── Invite flow ──────────────────────────────────────────────────────────────
-@app.route('/invite/<token>', methods=['GET', 'POST'])
-def invite_accept(token):
-    import db
-    from auth import hash_password
-
-    invite = db.get_invite_token(token)
-    now = datetime.now()
-
-    if not invite:
-        flash('Ongeldige uitnodigingslink', 'error')
-        return redirect(url_for('login'))
-    if invite['accepted_at']:
-        flash('Deze uitnodiging is al gebruikt', 'warning')
-        return redirect(url_for('login'))
-    if invite['expires_at'] < now:
-        flash('Deze uitnodiging is verlopen', 'error')
-        return redirect(url_for('login'))
-
-    tenant = db.get_tenant(invite['tenant_id'])
-
-    if request.method == 'POST':
-        full_name  = request.form.get('full_name', '').strip()
-        password   = request.form.get('password', '')
-        password2  = request.form.get('password2', '')
-
-        if not full_name:
-            flash('Volledige naam is verplicht', 'error')
-        elif len(password) < 8:
-            flash('Wachtwoord moet minstens 8 tekens zijn', 'error')
-        elif password != password2:
-            flash('Wachtwoorden komen niet overeen', 'error')
-        else:
-            user_id = db.create_user(
-                email=invite['email'],
-                password_hash=hash_password(password),
-                role=invite['role'],
-                tenant_id=invite['tenant_id'],
-                full_name=full_name,
-            )
-            db.accept_invite_token(token)
-            db.log_audit('invite_accepted', user_id=user_id,
-                         tenant_id=invite['tenant_id'], ip=request.remote_addr)
-            session['user_id'] = user_id
-            flash(f'Welkom bij {APP_NAME}, {full_name}!', 'success')
-            return redirect(url_for('dashboard'))
-
-    return render_template('invite.html', invite=invite, tenant=tenant, app_name=APP_NAME)
-
-
-# ─── Dashboard ────────────────────────────────────────────────────────────────
+# ─── Routes ───────────────────────────────────────────────────────────────────
 @app.route('/')
 def dashboard():
-    import db
-    from datetime import timedelta
-    db.init_db()
-    db.sync_contacts_from_log(g.tenant_id)
+    from db import init_db, get_connection, get_schedule_config, sync_contacts_from_log
+    init_db()
+    sync_contacts_from_log()
+    with get_connection() as conn:
+        total = conn.execute('SELECT COUNT(*) FROM review_log').fetchone()[0]
+        this_month = conn.execute(
+            "SELECT COUNT(*) FROM review_log WHERE sent_at >= date('now','start of month')"
+        ).fetchone()[0]
+        last_run = conn.execute(
+            'SELECT * FROM import_log ORDER BY import_at DESC LIMIT 1'
+        ).fetchone()
+        recent = conn.execute(
+            'SELECT naam, email, sent_at FROM review_log ORDER BY sent_at DESC LIMIT 15'
+        ).fetchall()
+        reviewed_count = conn.execute('SELECT COUNT(*) FROM reviewed_names').fetchone()[0]
+        input_count = sum(1 for f in INPUT_DIR.iterdir() if f.suffix.lower() in ALLOWED)
 
-    stats = db.get_dashboard_stats(g.tenant_id)
-
-    # Calculate deltas for 30-day comparison
-    with db.get_connection() as conn:
-        # Previous month total
-        cur = db._q(conn,
-            """SELECT COUNT(*) as cnt FROM review_log
-               WHERE tenant_id = %s AND sent_at >= date_trunc('month', NOW() - interval '1 month')
-               AND sent_at < date_trunc('month', NOW())""",
-            (g.tenant_id,))
-        prev_month = cur.fetchone()['cnt']
-
-        # Previous 30 days for sparkline
-        cur = db._q(conn,
-            """SELECT COUNT(*) as cnt FROM review_log
-               WHERE tenant_id = %s AND sent_at >= NOW() - interval '30 days'
-               AND sent_at < NOW() - interval '30 days'""",
-            (g.tenant_id,))
-        prev_30d_total = cur.fetchone()['cnt'] or 0
-
-    delta_total = get_delta(stats['total'], stats['total'] - stats['this_month'])
-    delta_month = stats['this_month'] - prev_month
-    delta_review_rate = None
-
-    if stats['total'] > 0 and stats['reviewed_count'] is not None:
-        prev_reviewed = max(0, stats['reviewed_count'] - 10)  # Mock previous
-        current_rate = (stats['reviewed_count'] / stats['total']) * 100
-        prev_rate = (prev_reviewed / (stats['total'] - stats['this_month'])) * 100 if (stats['total'] - stats['this_month']) > 0 else 0
-        delta_review_rate = round(current_rate - prev_rate, 1)
-
-    review_baseline = db.get_tenant_setting(g.tenant_id, 'review_baseline') or None
-    review_growth   = db.get_review_growth(g.tenant_id, baseline=review_baseline)
-    review_snapshots = db.get_review_snapshots(g.tenant_id)
-
-    if review_baseline and stats['first_sent_date']:
-        start_date = stats['first_sent_date']
-        if not review_snapshots or review_snapshots[0]['date'] > start_date:
-            review_snapshots = [{'date': start_date,
-                                 'total': int(review_baseline)}] + review_snapshots
-
-    cfg = db.get_schedule_config(g.tenant_id)
-    job = scheduler.get_job(f'auto_{g.tenant_id}')
+    cfg = get_schedule_config()
+    job = scheduler.get_job('auto')
     next_run = job.next_run_time.strftime('%a %d/%m %H:%M') if job else None
-
-    input_count = sum(
-        1 for f in get_tenant_input_dir(g.tenant_id).iterdir()
-        if f.suffix.lower() in ALLOWED
-    )
-
-    # Enrich recent rows with status and template_name
-    for r in stats['recent']:
-        r['status'] = 'delivered'
-        r['status_label'] = 'Bezorgd'
-        r['status_class'] = ''
-        r['template_name'] = stats['last_run'].get('modus', 'Standaard NL') if stats['last_run'] else None
+    from db import get_review_growth, get_app_setting, get_review_snapshots, get_connection
+    review_baseline = get_app_setting('review_baseline') or None
+    review_growth = get_review_growth(baseline=review_baseline)
+    review_snapshots = get_review_snapshots()
+    # Prepend a synthetic start point at the baseline value on the date of the first sent mail
+    if review_baseline:
+        with get_connection() as _conn:
+            _first = _conn.execute("SELECT DATE(MIN(sent_at)) as d FROM review_log").fetchone()
+        start_date = _first['d'] if _first and _first['d'] else None
+        if start_date and (not review_snapshots or review_snapshots[0]['date'] > start_date):
+            review_snapshots = [{'date': start_date, 'total': int(review_baseline)}] + review_snapshots
 
     return render_template('dashboard.html',
-        total=stats['total'],
-        this_month=stats['this_month'],
-        delta_total=delta_total,
-        delta_month=delta_month,
-        delta_review_rate=delta_review_rate,
-        last_run=stats['last_run'],
-        recent=stats['recent'],
-        reviewed_count=stats['reviewed_count'],
-        input_count=input_count,
-        next_run=next_run,
-        schedule=cfg,
+        total=total, this_month=this_month, last_run=last_run,
+        recent=recent, reviewed_count=reviewed_count,
+        input_count=input_count, next_run=next_run, schedule=cfg,
         review_growth=review_growth,
         review_snapshots=review_snapshots,
         review_baseline=review_baseline,
-        page='dashboard',
-        app_name=APP_NAME,
-    )
+        page='dashboard')
 
 
-# ─── Upload ───────────────────────────────────────────────────────────────────
 @app.route('/upload', methods=['GET', 'POST'])
 def upload():
-    input_dir = get_tenant_input_dir(g.tenant_id)
     if request.method == 'POST':
         files = request.files.getlist('files')
         saved = []
         for f in files:
             if f and f.filename and Path(f.filename).suffix.lower() in ALLOWED:
                 name = secure_filename(f.filename)
-                f.save(input_dir / name)
+                f.save(INPUT_DIR / name)
                 saved.append(name)
         if saved:
             flash(f'{len(saved)} bestand(en) geüpload', 'success')
@@ -513,7 +294,7 @@ def upload():
             flash('Geen geldige bestanden (.csv, .xlsx)', 'warning')
         return redirect(url_for('upload'))
 
-    raw = sorted(input_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+    raw = sorted(INPUT_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
     files = []
     for f in raw:
         if f.suffix.lower() in ALLOWED:
@@ -523,13 +304,12 @@ def upload():
                 'size': f'{st.st_size / 1024:.1f} KB',
                 'modified': datetime.fromtimestamp(st.st_mtime).strftime('%d/%m/%Y %H:%M'),
             })
-    return render_template('upload.html', files=files, page='upload', app_name=APP_NAME)
+    return render_template('upload.html', files=files, page='upload')
 
 
 @app.route('/upload/delete/<path:filename>')
 def delete_file(filename):
-    input_dir = get_tenant_input_dir(g.tenant_id)
-    p = input_dir / secure_filename(filename)
+    p = INPUT_DIR / secure_filename(filename)
     if p.exists():
         p.unlink()
         flash(f'{p.name} verwijderd', 'info')
@@ -538,19 +318,16 @@ def delete_file(filename):
 
 @app.route('/upload/logo', methods=['POST'])
 def upload_logo():
-    import db
-    upload_dir = get_tenant_upload_dir(g.tenant_id)
-
+    from db import save_app_settings, get_app_setting
     if request.form.get('action') == 'delete_logo':
-        logo_url = db.get_tenant_setting(g.tenant_id, 'logo_url', '')
+        logo_url = get_app_setting('logo_url', '')
         if logo_url:
             logo_path = ROOT / logo_url.lstrip('/')
             if logo_path.exists():
                 logo_path.unlink()
-        db.save_tenant_setting(g.tenant_id, 'logo_url', '')
+        save_app_settings({'logo_url': ''})
         flash('Logo verwijderd', 'success')
         return redirect(url_for('settings'))
-
     f = request.files.get('logo')
     if not f or not f.filename:
         flash('Geen bestand geselecteerd', 'warning')
@@ -559,239 +336,277 @@ def upload_logo():
     if ext not in {'png', 'jpg', 'jpeg', 'svg', 'gif', 'webp'}:
         flash('Ongeldig bestandstype — gebruik PNG, JPG of SVG', 'warning')
         return redirect(url_for('settings'))
-    f.save(upload_dir / f'logo.{ext}')
-    db.save_tenant_setting(
-        g.tenant_id, 'logo_url',
-        f'/static/uploads/{g.tenant_id}/logo.{ext}',
-    )
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    f.save(UPLOAD_DIR / f'logo.{ext}')
+    save_app_settings({'logo_url': f'/static/uploads/logo.{ext}'})
     flash('Logo opgeslagen ✓', 'success')
     return redirect(url_for('settings'))
 
 
-# ─── Run ─────────────────────────────────────────────────────────────────────
 @app.route('/run')
 def run_page():
-    import db
-    admin          = db.get_tenant_setting(g.tenant_id, 'admin_email', '')
-    send_geblokkeerd = db.get_tenant_setting(g.tenant_id, 'send_geblokkeerd', '0') == '1'
-    run_snapshot   = dict(_get_run(g.tenant_id))
+    from db import init_db, get_app_setting
+    init_db()
+    admin = get_app_setting('admin_email') or os.getenv('ADMIN_EMAIL', '')
+    send_geblokkeerd = get_app_setting('send_geblokkeerd', '0') == '1'
+    with _lock:
+        run_snapshot = dict(_run)
     return render_template('run.html', run=run_snapshot, admin=admin,
-                           send_geblokkeerd=send_geblokkeerd, page='run', app_name=APP_NAME)
+                           send_geblokkeerd=send_geblokkeerd, page='run')
 
 
 @app.route('/run/start', methods=['POST'])
 def run_start():
-    import db
-    modus       = request.form.get('modus', 'dry')
-    admin_email = db.get_tenant_setting(g.tenant_id, 'admin_email', '')
-    test_email  = request.form.get('test_email') or admin_email
-    run = _get_run(g.tenant_id)
-    with _run_lock:
-        if run['active']:
+    from db import get_app_setting
+    modus = request.form.get('modus', 'dry')
+    admin_email = get_app_setting('admin_email') or os.getenv('ADMIN_EMAIL', '')
+    test_email = request.form.get('test_email') or admin_email
+    with _lock:
+        if _run['active']:
             flash('Er loopt al een run', 'warning')
             return redirect(url_for('run_page'))
-    threading.Thread(
-        target=do_run, args=(g.tenant_id, modus, test_email), daemon=True
-    ).start()
+    threading.Thread(target=do_run, args=(modus, test_email), daemon=True).start()
     return redirect(url_for('run_page'))
 
 
 @app.route('/api/run/status')
 def run_status():
-    run = _get_run(g.tenant_id)
-    return jsonify({
-        'active': run['active'],
-        'done':   run['done'],
-        'lines':  run['lines'][-200:],
-        'counts': run['counts'],
-        'modus':  run['modus'],
-    })
+    with _lock:
+        return jsonify({
+            'active': _run['active'],
+            'done': _run['done'],
+            'lines': _run['lines'][-200:],
+            'counts': _run['counts'],
+            'modus': _run['modus'],
+        })
 
 
-# ─── Schedule ─────────────────────────────────────────────────────────────────
 @app.route('/schedule', methods=['GET', 'POST'])
 def schedule():
-    import db
+    from db import get_schedule_config, save_schedule_config
     if request.method == 'POST':
-        db.save_schedule_config(g.tenant_id, {
-            'modus':        request.form.get('modus', 'manual'),
+        save_schedule_config({
+            'modus': request.form.get('modus', 'manual'),
             'dag_van_week': int(request.form.get('dag_van_week', 0)),
-            'tijdstip':     request.form.get('tijdstip', '09:00'),
-            'actief':       bool(request.form.get('actief')),
+            'tijdstip': request.form.get('tijdstip', '09:00'),
+            'actief': 1 if request.form.get('actief') else 0,
         })
-        reload_schedule(g.tenant_id)
+        reload_schedule()
         flash('Schema opgeslagen', 'success')
         return redirect(url_for('schedule'))
 
-    cfg = db.get_schedule_config(g.tenant_id)
-    job = scheduler.get_job(f'auto_{g.tenant_id}')
+    cfg = get_schedule_config()
+    job = scheduler.get_job('auto')
     next_run = job.next_run_time.strftime('%A %d/%m/%Y om %H:%M') if job else None
-    return render_template('schedule.html', cfg=cfg, next_run=next_run,
-                           page='schedule', app_name=APP_NAME)
+    return render_template('schedule.html', cfg=cfg, next_run=next_run, page='schedule')
 
 
-# ─── Logs ────────────────────────────────────────────────────────────────────
 @app.route('/logs')
 def logs():
-    import db
-    runs = db.get_import_logs(g.tenant_id)
-    sent = db.get_sent_logs(g.tenant_id)
-    return render_template('logs.html', runs=runs, sent=sent,
-                           page='logs', app_name=APP_NAME)
+    from db import init_db, get_connection
+    init_db()
+    with get_connection() as conn:
+        runs = conn.execute(
+            'SELECT * FROM import_log ORDER BY import_at DESC LIMIT 30'
+        ).fetchall()
+        sent = conn.execute(
+            'SELECT naam, email, sent_at, bestand FROM review_log ORDER BY sent_at DESC LIMIT 100'
+        ).fetchall()
+    return render_template('logs.html', runs=runs, sent=sent, page='logs')
 
 
 @app.route('/logs/export')
 def export_log():
-    import db
-    output_dir = get_tenant_output_dir(g.tenant_id)
-    path = output_dir / 'review_log_export.csv'
-    db.export_review_log(g.tenant_id, path)
+    from db import init_db, export_review_log
+    init_db()
+    path = OUTPUT_DIR / 'review_log_export.csv'
+    export_review_log(path)
     return send_file(str(path), as_attachment=True, download_name='review_log.csv')
 
 
-# ─── Settings ────────────────────────────────────────────────────────────────
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
-    import db
-    from auth import hash_password, verify_password
-
+    from db import (init_db, get_reviewed_names, add_reviewed_name, get_connection,
+                    get_all_app_settings, save_app_settings, get_app_setting)
+    init_db()
     if request.method == 'POST':
         action = request.form.get('action')
-
         if action == 'add_reviewed':
             naam = request.form.get('naam', '').strip()
             if naam:
-                db.add_reviewed_name(g.tenant_id, naam)
+                add_reviewed_name(naam)
                 flash(f'"{naam}" toegevoegd', 'success')
-
         elif action == 'delete_reviewed':
             naam = request.form.get('naam', '')
-            db.delete_reviewed_name(g.tenant_id, naam)
+            with get_connection() as conn:
+                conn.execute('DELETE FROM reviewed_names WHERE naam = ?', (naam,))
             flash(f'"{naam}" verwijderd', 'info')
-
         elif action == 'save_settings':
             fields = {
-                'smtp_host':             request.form.get('smtp_host', '').strip(),
-                'smtp_port':             request.form.get('smtp_port', '587').strip(),
-                'smtp_user':             request.form.get('smtp_user', '').strip(),
-                'smtp_password':         request.form.get('smtp_password', '').strip(),
-                'from_email':            request.form.get('from_email', '').strip(),
-                'from_name':             request.form.get('from_name', '').strip(),
-                'admin_email':           request.form.get('admin_email', '').strip(),
-                'google_review_link':    request.form.get('google_review_link', '').strip(),
-                'send_geblokkeerd':      '1' if request.form.get('send_geblokkeerd') else '0',
-                'google_places_api_key': request.form.get('google_places_api_key', '').strip(),
-                'google_place_id':       request.form.get('google_place_id', '').strip(),
-                'review_baseline':       request.form.get('review_baseline', '').strip(),
-                'praktijknaam':          request.form.get('praktijknaam', '').strip(),
+                'smtp_host':          request.form.get('smtp_host', '').strip(),
+                'smtp_port':          request.form.get('smtp_port', '587').strip(),
+                'smtp_user':          request.form.get('smtp_user', '').strip(),
+                'smtp_password':      request.form.get('smtp_password', '').strip(),
+                'from_email':         request.form.get('from_email', '').strip(),
+                'from_name':          request.form.get('from_name', '').strip(),
+                'admin_email':        request.form.get('admin_email', '').strip(),
+                'google_review_link': request.form.get('google_review_link', '').strip(),
+                'send_geblokkeerd':   '1' if request.form.get('send_geblokkeerd') else '0',
+                'myorganizer_client_id':     request.form.get('myorganizer_client_id', '').strip(),
+                'myorganizer_client_secret': request.form.get('myorganizer_client_secret', '').strip(),
+                'myorganizer_tenant_id':     request.form.get('myorganizer_tenant_id', '').strip(),
+                'google_places_api_key':     request.form.get('google_places_api_key', '').strip(),
+                'google_place_id':           request.form.get('google_place_id', '').strip(),
+                'review_baseline':           request.form.get('review_baseline', '').strip(),
             }
-            # Preserve logo_url (managed via /upload/logo)
-            fields['logo_url'] = db.get_tenant_setting(g.tenant_id, 'logo_url', '')
-            # Don't overwrite smtp_password if left blank
+            # logo_url is managed separately via /upload/logo — preserve existing value
+            fields['logo_url'] = get_app_setting('logo_url', '') or ''
+            # Don't overwrite smtp_password if blank
             if not fields['smtp_password']:
-                fields['smtp_password'] = db.get_tenant_setting(g.tenant_id, 'smtp_password', '')
-            db.save_tenant_settings(g.tenant_id, fields)
+                fields['smtp_password'] = get_app_setting('smtp_password', '')
+            # App password change — Google-stijl: huidig + nieuw 2x
+            current_pw = request.form.get('app_password_current', '').strip()
+            new_pw     = request.form.get('app_password_new', '').strip()
+            confirm_pw = request.form.get('app_password_confirm', '').strip()
+            if new_pw or current_pw:
+                stored = get_app_setting('app_password') or os.getenv('APP_PASSWORD', 'reviewflow2024')
+                if not _check_password(current_pw, stored):
+                    flash('Huidig wachtwoord klopt niet', 'error')
+                elif len(new_pw) < 8:
+                    flash('Nieuw wachtwoord moet minstens 8 tekens zijn', 'error')
+                elif new_pw != confirm_pw:
+                    flash('Nieuwe wachtwoorden komen niet overeen', 'error')
+                else:
+                    fields['app_password'] = generate_password_hash(new_pw)
+                    flash('Wachtwoord gewijzigd ✓', 'success')
+            save_app_settings(fields)
+            # Also write SMTP settings back to .env file
+            _update_env_file(fields)
             flash('Instellingen opgeslagen', 'success')
-
-        elif action == 'change_password':
-            current_pw = request.form.get('password_current', '').strip()
-            new_pw     = request.form.get('password_new', '').strip()
-            confirm_pw = request.form.get('password_confirm', '').strip()
-            if not verify_password(current_pw, g.user['password_hash']):
-                flash('Huidig wachtwoord klopt niet', 'error')
-            elif len(new_pw) < 8:
-                flash('Nieuw wachtwoord moet minstens 8 tekens zijn', 'error')
-            elif new_pw != confirm_pw:
-                flash('Nieuwe wachtwoorden komen niet overeen', 'error')
-            else:
-                db.update_user_password(g.user['id'], hash_password(new_pw))
-                flash('Wachtwoord gewijzigd ✓', 'success')
-
         return redirect(url_for('settings'))
 
-    reviewed   = db.get_reviewed_names(g.tenant_id)
-    db_settings = db.get_all_tenant_settings(g.tenant_id)
-    defaults = {
-        'smtp_host': '', 'smtp_port': '587', 'smtp_user': '',
-        'smtp_password': '', 'from_email': '', 'from_name': '',
-        'admin_email': '', 'google_review_link': '', 'send_geblokkeerd': '0',
-        'google_places_api_key': '', 'google_place_id': '', 'logo_url': '',
-        'review_baseline': '', 'praktijknaam': '',
+    reviewed = get_reviewed_names()
+    db_settings = get_all_app_settings()
+    # Merge: DB values take priority, fall back to .env
+    env_defaults = {
+        'smtp_host':          os.getenv('SMTP_HOST', 'smtp.gmail.com'),
+        'smtp_port':          os.getenv('SMTP_PORT', '587'),
+        'smtp_user':          os.getenv('SMTP_USER', ''),
+        'smtp_password':      os.getenv('SMTP_PASSWORD', ''),
+        'from_email':         os.getenv('FROM_EMAIL', ''),
+        'from_name':          os.getenv('FROM_NAME', 'Osteozuid'),
+        'admin_email':        os.getenv('ADMIN_EMAIL', ''),
+        'google_review_link': os.getenv('GOOGLE_REVIEW_LINK', ''),
+        'send_geblokkeerd':   '0',
+        'myorganizer_client_id':     '',
+        'myorganizer_client_secret': '',
+        'myorganizer_tenant_id':     '',
+        'google_places_api_key':     '',
+        'google_place_id':           os.getenv('GOOGLE_PLACE_ID', ''),
+        'logo_url':                  '',
+        'review_baseline':           '',
     }
-    cfg = {k: db_settings.get(k) or defaults.get(k, '') for k in defaults}
-    return render_template('settings.html', reviewed=reviewed, cfg=cfg,
-                           page='settings', app_name=APP_NAME)
+    cfg = {k: db_settings.get(k) or env_defaults.get(k, '') for k in env_defaults}
+    return render_template('settings.html', reviewed=reviewed, cfg=cfg, page='settings')
 
 
-# ─── Templates ───────────────────────────────────────────────────────────────
+def _update_env_file(fields):
+    """Write SMTP-related settings back to .env file."""
+    env_path = ROOT / '.env'
+    env_map = {
+        'SMTP_HOST':          fields.get('smtp_host', ''),
+        'SMTP_PORT':          fields.get('smtp_port', '587'),
+        'SMTP_USER':          fields.get('smtp_user', ''),
+        'SMTP_PASSWORD':      fields.get('smtp_password', ''),
+        'FROM_EMAIL':         fields.get('from_email', ''),
+        'FROM_NAME':          fields.get('from_name', ''),
+        'ADMIN_EMAIL':        fields.get('admin_email', ''),
+        'GOOGLE_REVIEW_LINK': fields.get('google_review_link', ''),
+    }
+    # Read existing .env if present
+    existing = {}
+    if env_path.exists():
+        for line in env_path.read_text(encoding='utf-8').splitlines():
+            line = line.strip()
+            if '=' in line and not line.startswith('#'):
+                k, _, v = line.partition('=')
+                existing[k.strip()] = v.strip()
+    existing.update(env_map)
+    lines = [f'{k}={v}' for k, v in existing.items()]
+    env_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
+# ─── Template routes ──────────────────────────────────────────────────────────
+
 @app.route('/templates')
 def templates_list():
-    import db
-    templates = db.get_all_templates(g.tenant_id)
-    return render_template('templates_list.html', templates=templates,
-                           page='templates', app_name=APP_NAME)
+    from db import init_db, get_all_templates
+    init_db()
+    templates = get_all_templates()
+    return render_template('templates_list.html', templates=templates, page='templates')
+
+
 
 
 @app.route('/templates/new')
 def template_new():
-    import db
-    logo_url    = db.get_tenant_setting(g.tenant_id, 'logo_url', '')
-    admin_email = db.get_tenant_setting(g.tenant_id, 'admin_email', '')
+    from db import get_app_setting
     return render_template('template_editor.html', template=None, page='templates',
-                           logo_url=logo_url, admin_email=admin_email, app_name=APP_NAME)
+                           logo_url=get_app_setting('logo_url') or '',
+                           admin_email=get_app_setting('admin_email') or '')
 
 
 @app.route('/templates/save', methods=['POST'])
 def template_save():
-    import db
-    naam       = request.form.get('naam', '').strip()
-    onderwerp  = request.form.get('onderwerp', '').strip()
-    body_html  = request.form.get('body_html', '')
-    tpl_id     = request.form.get('id') or None
+    from db import save_template
+    naam      = request.form.get('naam', '').strip()
+    onderwerp = request.form.get('onderwerp', '').strip()
+    body_html = request.form.get('body_html', '')
+    tpl_id    = request.form.get('id') or None
     if not naam or not onderwerp:
         flash('Naam en onderwerp zijn verplicht', 'warning')
         return redirect(url_for('templates_list'))
-    db.save_template(g.tenant_id, naam, onderwerp, body_html, template_id=tpl_id)
+    save_template(naam, onderwerp, body_html, id=tpl_id)
     flash('Template opgeslagen', 'success')
     return redirect(url_for('templates_list'))
 
 
 @app.route('/templates/<int:id>/edit')
 def template_edit(id):
-    import db
-    tpl = db.get_template(g.tenant_id, id)
+    from db import init_db, get_template
+    init_db()
+    tpl = get_template(id)
     if not tpl:
         flash('Template niet gevonden', 'warning')
         return redirect(url_for('templates_list'))
-    logo_url    = db.get_tenant_setting(g.tenant_id, 'logo_url', '')
-    admin_email = db.get_tenant_setting(g.tenant_id, 'admin_email', '')
+    from db import get_app_setting
     return render_template('template_editor.html', template=tpl, page='templates',
-                           logo_url=logo_url, admin_email=admin_email, app_name=APP_NAME)
+                           logo_url=get_app_setting('logo_url') or '',
+                           admin_email=get_app_setting('admin_email') or '')
 
 
 @app.route('/templates/<int:id>/delete', methods=['POST'])
 def template_delete(id):
-    import db
-    ok, msg = db.delete_template(g.tenant_id, id)
+    from db import delete_template
+    ok, msg = delete_template(id)
     flash(msg, 'success' if ok else 'warning')
     return redirect(url_for('templates_list'))
 
 
 @app.route('/templates/<int:id>/test-mail', methods=['POST'])
 def template_test_mail(id):
-    import db
+    from db import get_template
     from mailer import get_smtp_config, _render_template, _send
     test_email = request.form.get('test_email', '').strip()
     if not test_email:
         return jsonify({'ok': False, 'msg': 'Geen e-mailadres opgegeven'})
-    tpl = db.get_template(g.tenant_id, id)
+    tpl = get_template(id)
     if not tpl:
         return jsonify({'ok': False, 'msg': 'Template niet gevonden'})
     try:
-        smtp = get_smtp_config(g.tenant_id)
+        smtp = get_smtp_config()
         review_link = smtp.get('google_review_link') or '#'
-        logo_url    = smtp.get('logo_url', '')
-        html_body   = _render_template(tpl['body_html'], 'Jan (Test)', review_link, logo_url)
+        html_body = _render_template(tpl['body_html'], 'Jan (Test)', review_link, smtp.get('logo_url', ''))
         _send(test_email, 'Jan (Test)', review_link, smtp,
               subject=f"[TEST] {tpl['onderwerp']}",
               html_body=html_body)
@@ -802,251 +617,152 @@ def template_test_mail(id):
 
 @app.route('/templates/<int:id>/activate', methods=['POST'])
 def template_activate(id):
-    import db
-    db.set_active_template(g.tenant_id, id)
+    from db import set_active_template
+    set_active_template(id)
     flash('Template geactiveerd', 'success')
     return redirect(url_for('templates_list'))
 
 
-# ─── Contacts ────────────────────────────────────────────────────────────────
+# ─── Contacts routes ──────────────────────────────────────────────────────────
+
 @app.route('/contacts')
 def contacts():
-    import db
-    all_contacts = db.get_all_contacts(g.tenant_id)
-    return render_template('contacts.html', contacts=all_contacts,
-                           page='contacts', app_name=APP_NAME)
+    from db import init_db, get_all_contacts
+    init_db()
+    all_contacts = get_all_contacts()
+    return render_template('contacts.html', contacts=all_contacts, page='contacts')
 
 
 @app.route('/uitsluitingen', methods=['GET', 'POST'])
 def uitsluitingen():
-    import db
+    from db import (init_db, get_reviewed_names_full, add_reviewed_name, delete_reviewed_name,
+                    get_blocked_list, add_blocked_person, delete_blocked_person)
+    init_db()
     if request.method == 'POST':
         action = request.form.get('action')
         if action == 'add_reviewed':
             naam = request.form.get('naam', '').strip()
             if naam:
-                db.add_reviewed_name(g.tenant_id, naam)
+                add_reviewed_name(naam)
                 flash(f'"{naam}" toegevoegd aan Al gereviewd', 'success')
         elif action == 'delete_reviewed':
-            db.delete_reviewed_name(g.tenant_id, request.form.get('naam', ''))
-            flash('Verwijderd', 'info')
+            naam = request.form.get('naam', '')
+            delete_reviewed_name(naam)
+            flash(f'"{naam}" verwijderd', 'info')
         elif action == 'add_blocked':
-            naam  = request.form.get('naam', '').strip()
+            naam = request.form.get('naam', '').strip()
             email = request.form.get('email', '').strip()
             reden = request.form.get('reden', '').strip()
             if naam:
-                db.add_blocked_person(g.tenant_id, naam, email, reden)
+                add_blocked_person(naam, email, reden)
                 flash(f'"{naam}" toegevoegd aan Niet mailen', 'success')
         elif action == 'delete_blocked':
-            db.delete_blocked_person(g.tenant_id, request.form.get('id', ''))
+            bid = request.form.get('id', '')
+            delete_blocked_person(bid)
             flash('Verwijderd', 'info')
         return redirect(url_for('uitsluitingen'))
 
-    reviewed = db.get_reviewed_names_full(g.tenant_id)
-    blocked  = db.get_blocked_list(g.tenant_id)
-    return render_template('uitsluitingen.html', reviewed=reviewed, blocked=blocked,
-                           page='uitsluitingen', app_name=APP_NAME)
+    reviewed = get_reviewed_names_full()
+    blocked = get_blocked_list()
+    return render_template('uitsluitingen.html', reviewed=reviewed, blocked=blocked, page='uitsluitingen')
 
 
 @app.route('/contacts/export/csv')
 def contacts_export_csv():
     import csv as csv_module
-    import db
-    all_contacts = db.get_all_contacts(g.tenant_id)
+    from db import get_all_contacts
+    contacts = get_all_contacts()
     output = io.StringIO()
     writer = csv_module.writer(output, delimiter=';')
     writer.writerow(['naam', 'email', 'eerste_mail', 'laatste_mail', 'aantal_mails'])
-    for c in all_contacts:
-        writer.writerow([c['naam'], c['email'], c['eerste_mail'],
-                         c['laatste_mail'], c['aantal_mails']])
+    for c in contacts:
+        writer.writerow([c['naam'], c['email'], c['eerste_mail'], c['laatste_mail'], c['aantal_mails']])
     output.seek(0)
     return Response(
         '﻿' + output.getvalue(),
         mimetype='text/csv',
-        headers={'Content-Disposition': 'attachment; filename=contacten.csv'},
+        headers={'Content-Disposition': 'attachment; filename=contacten.csv'}
     )
 
 
 @app.route('/contacts/export/xlsx')
 def contacts_export_xlsx():
-    import db
+    from db import get_all_contacts
     import openpyxl
-    all_contacts = db.get_all_contacts(g.tenant_id)
+    contacts = get_all_contacts()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Contacten'
     ws.append(['Naam', 'E-mail', 'Eerste mail', 'Laatste mail', 'Aantal mails'])
-    for c in all_contacts:
-        ws.append([c['naam'], c['email'], c['eerste_mail'],
-                   c['laatste_mail'], c['aantal_mails']])
+    for c in contacts:
+        ws.append([c['naam'], c['email'], c['eerste_mail'], c['laatste_mail'], c['aantal_mails']])
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
     return Response(
         output.getvalue(),
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        headers={'Content-Disposition': 'attachment; filename=contacten.xlsx'},
+        headers={'Content-Disposition': 'attachment; filename=contacten.xlsx'}
     )
 
 
-# ─── Google Reviews ───────────────────────────────────────────────────────────
+# ─── Google Reviews page ──────────────────────────────────────────────────────
+
 @app.route('/google-reviews')
 def google_reviews_page():
-    import db
-    import requests as req_lib
-    api_key  = db.get_tenant_setting(g.tenant_id, 'google_places_api_key', '')
-    place_id = db.get_tenant_setting(g.tenant_id, 'google_place_id', '')
+    from db import init_db, get_app_setting
+    init_db()
+    api_key  = get_app_setting('google_places_api_key') or os.getenv('GOOGLE_PLACES_API_KEY', '')
+    place_id = get_app_setting('google_place_id') or os.getenv('GOOGLE_PLACE_ID', '')
 
-    reviews = []
+    reviews        = []
     overall_rating = None
     total_ratings  = None
-    error = None
+    error          = None
 
     if not api_key or not place_id:
         missing = []
         if not api_key:  missing.append('Google Places API Key')
         if not place_id: missing.append('Google Place ID')
-        error = f"Vereiste instellingen ontbreken: {', '.join(missing)}. Stel in via Instellingen."
+        error = f"Vereiste instellingen ontbreken: {', '.join(missing)}. Stel deze in via Instellingen."
     else:
         try:
-            resp = req_lib.get(
-                'https://maps.googleapis.com/maps/api/place/details/json',
-                params={'place_id': place_id,
-                        'fields': 'reviews,rating,user_ratings_total',
-                        'language': 'nl', 'key': api_key},
-                timeout=10,
-            )
+            import requests as req_lib
+            url = 'https://maps.googleapis.com/maps/api/place/details/json'
+            params = {
+                'place_id': place_id,
+                'fields': 'reviews,rating,user_ratings_total',
+                'language': 'nl',
+                'key': api_key,
+            }
+            resp = req_lib.get(url, params=params, timeout=10)
             resp.raise_for_status()
             data = resp.json()
             if data.get('status') == 'OK':
-                result        = data.get('result', {})
-                reviews       = result.get('reviews', [])
+                result         = data.get('result', {})
+                reviews        = result.get('reviews', [])
                 overall_rating = result.get('rating')
                 total_ratings  = result.get('user_ratings_total')
                 if total_ratings:
-                    db.record_review_snapshot(g.tenant_id, total_ratings)
+                    from db import record_review_snapshot
+                    record_review_snapshot(total_ratings)
             else:
                 error = f"Google API fout: {data.get('status')} — {data.get('error_message', '')}"
         except Exception as e:
             error = str(e)
 
-    maps_url = (
-        f'https://www.google.com/maps/search/?api=1&query_place_id={place_id}&query=reviews'
-        if place_id else ''
-    )
+    maps_url = f'https://www.google.com/maps/search/?api=1&query_place_id={place_id}&query=reviews' if place_id else ''
     return render_template('google_reviews.html',
                            reviews=reviews,
                            overall_rating=overall_rating,
                            total_ratings=total_ratings,
                            error=error,
                            maps_url=maps_url,
-                           page='reviews',
-                           app_name=APP_NAME)
-
-
-# ─── Superadmin routes ────────────────────────────────────────────────────────
-@app.route('/admin/tenants')
-def admin_tenants():
-    import db
-    from auth import superadmin_required
-    if not g.user or g.user['role'] != 'superadmin':
-        abort(403)
-    tenants = db.get_all_tenants()
-    pending_invites = {}
-    for t in tenants:
-        pending_invites[t['id']] = db.get_pending_invites(t['id'])
-    db.log_audit('superadmin_view_tenants', user_id=g.user['id'], ip=request.remote_addr)
-    return render_template('admin_tenants.html',
-                           tenants=tenants,
-                           pending_invites=pending_invites,
-                           app_name=APP_NAME,
-                           page='admin')
-
-
-@app.route('/admin/tenants/new', methods=['POST'])
-def admin_tenant_create():
-    import db
-    from mailer import send_invite_email
-    if not g.user or g.user['role'] != 'superadmin':
-        abort(403)
-
-    slug          = request.form.get('slug', '').strip().lower()
-    name          = request.form.get('name', '').strip()
-    invite_email  = request.form.get('invite_email', '').strip().lower()
-    invite_role   = request.form.get('invite_role', 'owner')
-
-    if not slug or not name or not invite_email:
-        flash('Slug, naam en uitnodigingsmail zijn verplicht', 'error')
-        return redirect(url_for('admin_tenants'))
-
-    if db.get_tenant_by_slug(slug):
-        flash(f'Slug "{slug}" is al in gebruik', 'error')
-        return redirect(url_for('admin_tenants'))
-
-    try:
-        tenant_id = db.create_tenant(slug, name)
-        token     = db.create_invite_token(
-            email=invite_email,
-            tenant_id=tenant_id,
-            role=invite_role,
-            created_by=g.user['id'],
-        )
-        invite_url = f'{APP_BASE_URL}/invite/{token}'
-        try:
-            send_invite_email(invite_email, name, invite_url)
-            flash(f'Tenant "{name}" aangemaakt en uitnodiging verstuurd naar {invite_email}', 'success')
-        except Exception as e:
-            flash(f'Tenant aangemaakt maar mail kon niet verstuurd worden: {e}. '
-                  f'Invite URL: {invite_url}', 'warning')
-
-        db.log_audit('tenant_created', user_id=g.user['id'],
-                     details={'slug': slug, 'name': name, 'invite_email': invite_email},
-                     ip=request.remote_addr)
-    except Exception as e:
-        flash(f'Fout bij aanmaken tenant: {e}', 'error')
-
-    return redirect(url_for('admin_tenants'))
-
-
-@app.route('/admin/tenants/<int:tenant_id>/invite', methods=['POST'])
-def admin_tenant_invite(tenant_id):
-    import db
-    from mailer import send_invite_email
-    if not g.user or g.user['role'] != 'superadmin':
-        abort(403)
-
-    tenant       = db.get_tenant(tenant_id)
-    invite_email = request.form.get('invite_email', '').strip().lower()
-    invite_role  = request.form.get('invite_role', 'staff')
-
-    if not tenant or not invite_email:
-        flash('Ongeldige aanvraag', 'error')
-        return redirect(url_for('admin_tenants'))
-
-    token      = db.create_invite_token(invite_email, tenant_id, role=invite_role,
-                                        created_by=g.user['id'])
-    invite_url = f'{APP_BASE_URL}/invite/{token}'
-    try:
-        send_invite_email(invite_email, tenant['name'], invite_url)
-        flash(f'Uitnodiging verstuurd naar {invite_email}', 'success')
-    except Exception as e:
-        flash(f'Uitnodiging aangemaakt maar mail kon niet verstuurd worden: {e}. '
-              f'URL: {invite_url}', 'warning')
-
-    db.log_audit('invite_sent', user_id=g.user['id'],
-                 tenant_id=tenant_id,
-                 details={'invite_email': invite_email, 'role': invite_role},
-                 ip=request.remote_addr)
-    return redirect(url_for('admin_tenants'))
-
-
-# ─── Error handlers ───────────────────────────────────────────────────────────
-@app.errorhandler(403)
-def forbidden(e):
-    return render_template('login.html', error='Geen toegang', app_name=APP_NAME), 403
+                           page='reviews')
 
 
 if __name__ == '__main__':
-    import db
-    db.init_db()
+    from db import init_db
+    init_db()
+    reload_schedule()
     app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
