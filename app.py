@@ -394,19 +394,27 @@ def invite_accept(token):
         elif password != password2:
             flash('Wachtwoorden komen niet overeen', 'error')
         else:
-            user_id = db.create_user(
-                email=invite['email'],
-                password_hash=hash_password(password),
-                role=invite['role'],
-                tenant_id=invite['tenant_id'],
-                full_name=full_name,
-            )
-            db.accept_invite_token(token)
-            db.log_audit('invite_accepted', user_id=user_id,
-                         tenant_id=invite['tenant_id'], ip=request.remote_addr)
-            session['user_id'] = user_id
-            flash(f'Welkom bij {APP_NAME}, {full_name}!', 'success')
-            return redirect(url_for('dashboard'))
+            existing = db.get_user_by_email(invite['email'])
+            if existing:
+                flash(
+                    'Er bestaat al een account met dit e-mailadres. '
+                    'Log in via de normale loginpagina.',
+                    'error'
+                )
+            else:
+                user_id = db.create_user(
+                    email=invite['email'],
+                    password_hash=hash_password(password),
+                    role=invite['role'],
+                    tenant_id=invite['tenant_id'],
+                    full_name=full_name,
+                )
+                db.accept_invite_token(token)
+                db.log_audit('invite_accepted', user_id=user_id,
+                             tenant_id=invite['tenant_id'], ip=request.remote_addr)
+                session['user_id'] = user_id
+                flash(f'Welkom bij {APP_NAME}, {full_name}!', 'success')
+                return redirect(url_for('dashboard'))
 
     return render_template('invite.html', invite=invite, tenant=tenant, app_name=APP_NAME)
 
