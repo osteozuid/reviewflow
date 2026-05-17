@@ -789,7 +789,7 @@ def template_delete(id):
 @app.route('/templates/<int:id>/test-mail', methods=['POST'])
 def template_test_mail(id):
     import db
-    from mailer import get_smtp_config, _render_template, _send
+    from mailer import get_smtp_config, _render_template, render_subject, _send
     test_email = request.form.get('test_email', '').strip()
     if not test_email:
         return jsonify({'ok': False, 'msg': 'Geen e-mailadres opgegeven'})
@@ -798,12 +798,14 @@ def template_test_mail(id):
         return jsonify({'ok': False, 'msg': 'Template niet gevonden'})
     try:
         smtp = get_smtp_config(g.tenant_id)
-        review_link = smtp.get('google_review_link') or '#'
-        logo_url    = smtp.get('logo_url', '')
-        html_body   = _render_template(tpl['body_html'], 'Jan (Test)', review_link, logo_url)
+        review_link  = smtp.get('google_review_link') or '#'
+        logo_url     = smtp.get('logo_url', '')
+        praktijknaam = smtp.get('from_name', '')
+        html_body    = _render_template(tpl['body_html'], 'Jan (Test)',
+                                        review_link, logo_url, praktijknaam)
+        subject      = f"[TEST] {render_subject(tpl['onderwerp'], praktijknaam)}"
         _send(test_email, 'Jan (Test)', review_link, smtp,
-              subject=f"[TEST] {tpl['onderwerp']}",
-              html_body=html_body)
+              subject=subject, html_body=html_body)
         return jsonify({'ok': True, 'msg': f'Testmail verstuurd naar {test_email}'})
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)})

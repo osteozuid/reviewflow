@@ -410,6 +410,19 @@ class TestDashboardSparklines:
 
 @pytest.mark.requires_db
 class TestDefaultTemplates:
+    def test_reactivatie_niet_in_default_catalogus(self, db_module):
+        """Reactivatie mag NIET in DEFAULT_EMAIL_TEMPLATES zitten."""
+        from db import DEFAULT_EMAIL_TEMPLATES
+        namen = [t['naam'] for t in DEFAULT_EMAIL_TEMPLATES]
+        assert 'Reactivatie' not in namen
+
+    def test_nieuwe_tenant_krijgt_geen_reactivatie(self, db_module):
+        """Nieuwe tenant krijgt geen Reactivatie-template."""
+        tid = db_module.create_tenant(f'tpl-norct-{_uid()}', 'No Reactivatie Test')
+        templates = db_module.get_all_templates(tid)
+        namen = {t['naam'] for t in templates}
+        assert 'Reactivatie' not in namen
+
     def test_nieuwe_tenant_krijgt_alle_default_templates(self, db_module):
         """create_tenant seed alle DEFAULT_EMAIL_TEMPLATES voor de nieuwe tenant."""
         from db import DEFAULT_EMAIL_TEMPLATES
@@ -426,44 +439,47 @@ class TestDefaultTemplates:
         assert actief is not None
         assert actief['naam'] == 'Praktijk - Standaard'
 
+    def test_praktijknaam_in_standaard_onderwerp(self, db_module):
+        """Praktijk - Standaard heeft {{praktijknaam}} in het onderwerp."""
+        from db import DEFAULT_EMAIL_TEMPLATES
+        standaard = next(t for t in DEFAULT_EMAIL_TEMPLATES if t['naam'] == 'Praktijk - Standaard')
+        assert '{{praktijknaam}}' in standaard['onderwerp']
+
     def test_geen_duplicaten_bij_dubbele_seed(self, db_module):
         """seed_preset_templates twee keer aanroepen maakt geen duplicaten."""
         tid = db_module.create_tenant(f'tpl-dup-{_uid()}', 'Dup Test')
-        db_module.seed_preset_templates(tid)  # tweede keer
+        db_module.seed_preset_templates(tid)
         templates = db_module.get_all_templates(tid)
         namen = [t['naam'] for t in templates]
         assert len(namen) == len(set(namen)), f"Duplicaten gevonden: {namen}"
 
     def test_backfill_voegt_ontbrekende_toe(self, db_module):
         """seed_preset_templates vult ontbrekende templates aan zonder bestaande te raken."""
-        from auth import hash_password
         from db import DEFAULT_EMAIL_TEMPLATES
-        # Maak tenant met handmatig één template
         tid = db_module.create_tenant(f'tpl-bf-{_uid()}', 'Backfill Test')
-        # Verwijder alle templates (alsof oudere seed maar 2 had)
         with db_module.get_connection() as conn:
             db_module._q(conn,
                 "DELETE FROM email_templates WHERE tenant_id=%s AND naam != %s",
                 (tid, 'Praktijk - Standaard'))
-        resterend = db_module.get_all_templates(tid)
-        assert len(resterend) == 1
-
-        # Backfill
+        assert len(db_module.get_all_templates(tid)) == 1
         db_module.seed_preset_templates(tid)
         na_backfill = db_module.get_all_templates(tid)
         assert len(na_backfill) == len(DEFAULT_EMAIL_TEMPLATES)
-
-        # Bestaande template ongewijzigd
         standaard = next(t for t in na_backfill if t['naam'] == 'Praktijk - Standaard')
-        assert standaard['is_actief'] is True  # was al actief, mag niet veranderen
+        assert standaard['is_actief'] is True
 
     def test_templates_tenant_geïsoleerd(self, db_module, tenant_a, tenant_b):
         """Tenant A ziet geen templates van tenant B."""
-        tpls_a = db_module.get_all_templates(tenant_a['id'])
-        tpls_b = db_module.get_all_templates(tenant_b['id'])
-        ids_a = {t['id'] for t in tpls_a}
-        ids_b = {t['id'] for t in tpls_b}
+        ids_a = {t['id'] for t in db_module.get_all_templates(tenant_a['id'])}
+        ids_b = {t['id'] for t in db_module.get_all_templates(tenant_b['id'])}
         assert ids_a.isdisjoint(ids_b), "Template-IDs overlappen tussen tenants!"
+
+    def test_vriendelijk_professioneel_kort_aanwezig(self, db_module):
+        """Nieuwe tenant krijgt Vriendelijk niet — maar Professioneel en Kort & Krachtig wel."""
+        from db import DEFAULT_EMAIL_TEMPLATES
+        namen = {t['naam'] for t in DEFAULT_EMAIL_TEMPLATES}
+        assert 'Professioneel' in namen
+        assert 'Kort & Krachtig' in namen
 
     def test_owner_ziet_templates_pagina(self, app_client, owner_a):
         """/templates pagina laadt voor een ingelogde owner."""
@@ -473,9 +489,42 @@ class TestDefaultTemplates:
         assert 'Praktijk - Standaard'.encode() in resp.data
 
     def test_variabelen_zichtbaar_op_templates_pagina(self, app_client, owner_a):
-        """/templates toont de drie template-variabelen als zichtbare tekst."""
+        """/templates toont alle vier template-variabelen als zichtbare tekst."""
         login_as(app_client, owner_a['email'], owner_a['_password'])
         resp = app_client.get('/templates')
         assert b'{{voornaam}}' in resp.data
+        assert b'{{praktijknaam}}' in resp.data
         assert b'{{google_link}}' in resp.data
         assert b'{{logo}}' in resp.data
+
+
+# ── 12. Praktijknaam rendering (unit tests — geen DB nodig) ──────────────────
+
+class TestPraktijknaamRendering:
+    def test_render_subject_vervangt_praktijknaam(self):
+        from mailer import render_subject
+        result = render_subject('Uw ervaring bij {{praktijknaam}}', 'Test Praktijk')
+        assert result == 'Uw ervaring bij Test Praktijk'
+
+    def test_render_subject_zonder_variabele(self):
+        from mailer import render_subject
+        result = render_subject('Vast onderwerp', 'Test Praktijk')
+        assert result == 'Vast onderwerp'
+
+    def test_render_template_vervangt_praktijknaam(self):
+        from mailer import _render_template
+        body = '<p>Bedankt voor uw bezoek aan {{praktijknaam}}.</p>'
+        result = _render_template(body, 'Jan', 'https://g.co/test', '', 'Mijn Praktijk')
+        assert 'Mijn Praktijk' in result
+        assert '{{praktijknaam}}' not in result
+
+    def test_reactivatie_niet_in_catalogus(self):
+        from db import DEFAULT_EMAIL_TEMPLATES
+        namen = [t['naam'] for t in DEFAULT_EMAIL_TEMPLATES]
+        assert 'Reactivatie' not in namen
+
+    def test_praktijk_standaard_heeft_praktijknaam_in_onderwerp(self):
+        from db import DEFAULT_EMAIL_TEMPLATES
+        standaard = next(t for t in DEFAULT_EMAIL_TEMPLATES if t['naam'] == 'Praktijk - Standaard')
+        assert '{{praktijknaam}}' in standaard['onderwerp']
+        assert '{{praktijknaam}}' in standaard['body_html']

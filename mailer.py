@@ -45,8 +45,10 @@ def get_system_smtp_config():
     return cfg
 
 
-def _render_template(body_html, voornaam, google_review_link, logo_url=''):
+def _render_template(body_html, voornaam, google_review_link,
+                     logo_url='', praktijknaam=''):
     rendered = body_html.replace('{{voornaam}}', voornaam)
+    rendered = rendered.replace('{{praktijknaam}}', praktijknaam)
     rendered = rendered.replace('{{google_link}}', google_review_link)
     logo_html = (
         f'<img src="{logo_url}" alt="Logo" '
@@ -55,6 +57,10 @@ def _render_template(body_html, voornaam, google_review_link, logo_url=''):
     )
     rendered = rendered.replace('{{logo}}', logo_html)
     return rendered
+
+
+def render_subject(onderwerp, praktijknaam=''):
+    return onderwerp.replace('{{praktijknaam}}', praktijknaam)
 
 
 def _build_body_plain(voornaam, google_review_link):
@@ -96,10 +102,11 @@ def send_review_request(patient, smtp_config, template=None):
         raise ValueError("Google Review link is niet ingesteld")
 
     if template:
-        subject   = template['onderwerp']
+        praktijknaam = smtp_config.get('from_name', '')
+        subject   = render_subject(template['onderwerp'], praktijknaam)
         html_body = _render_template(
             template['body_html'], voornaam, review_link,
-            smtp_config.get('logo_url', ''),
+            smtp_config.get('logo_url', ''), praktijknaam,
         )
         _send(patient['email'], voornaam, review_link, smtp_config,
               subject=subject, html_body=html_body)

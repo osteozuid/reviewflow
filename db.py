@@ -670,22 +670,24 @@ def _tpl(body_rows):
 
 DEFAULT_EMAIL_TEMPLATES = [
     {
+        # Exact gebaseerd op productie-template "Origineel (Osteozuid)" (template id=4)
+        # "Osteozuid" vervangen door {{praktijknaam}}
         'naam': 'Praktijk - Standaard',
-        'onderwerp': 'Uw ervaring bij onze praktijk',
+        'onderwerp': 'Uw ervaring bij {{praktijknaam}}',
         'is_actief': True,
-        'body_html': _tpl(
-            f'<p style="{_P}">Dag {{{{voornaam}}}},</p>'
-            f'<p style="{_P}">Hartelijk bedankt voor uw bezoek aan onze praktijk. '
-            'We hopen dat we u goed hebben kunnen helpen.</p>'
-            f'<p style="{_P}">Als u een momentje heeft, zouden we het erg waarderen '
-            'als u uw ervaring deelt via Google. Uw review helpt andere mensen om '
-            'een geschikte praktijk te vinden.</p>'
-            f'<p style="margin:24px 0;"><a href="{{{{google_link}}}}" style="{_BTN}">'
-            'Schrijf uw Google review</a></p>'
-            f'<p style="{_P}">Heeft u opmerkingen of vragen? Antwoord dan gerust op '
-            'deze mail.</p>'
-            f'<p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0;">'
-            'Vriendelijke groeten,<br><strong>Uw praktijk</strong></p>'
+        'body_html': (
+            '<p>Dag {{voornaam}},</p>'
+            '<p>Bedankt voor uw bezoek aan {{praktijknaam}}.</p>'
+            '<p>We proberen elke patiënt zo goed mogelijk te begeleiden. '
+            'Als u enkele minuten tijd heeft, zouden we het enorm waarderen '
+            'als u uw ervaring wilt delen via Google — dat helpt andere mensen '
+            'om een praktijk te vinden die bij hen past.</p>'
+            '<p><a href="{{google_link}}" '
+            'style="color:#1a73e8;text-decoration:underline;font-weight:bold;">'
+            'Deel uw ervaring via Google</a></p>'
+            '<p>Wilt u liever rechtstreeks iets aan ons doorgeven? '
+            'Antwoord dan gerust op deze mail.</p>'
+            '<p>Vriendelijke groeten,<br>{{praktijknaam}}</p>'
         ),
     },
     {
@@ -702,7 +704,7 @@ DEFAULT_EMAIL_TEMPLATES = [
             f'<p style="margin:24px 0;"><a href="{{{{google_link}}}}" style="{_BTN}">'
             'Schrijf een recensie</a></p>'
             f'<p style="font-size:13px;line-height:1.6;color:#555555;margin:0;">'
-            'Met vriendelijke groeten,<br><strong>Uw praktijk</strong></p>'
+            'Met vriendelijke groeten,<br><strong>{{{{praktijknaam}}}}</strong></p>'
         ),
     },
     {
@@ -719,37 +721,20 @@ DEFAULT_EMAIL_TEMPLATES = [
         ),
     },
     {
+        # Tekst aangeleverd door gebruiker
         'naam': 'Massage - Warm',
         'onderwerp': 'Hoe heeft u zich gevoeld na uw sessie?',
         'is_actief': False,
-        'body_html': _tpl(
-            f'<p style="{_P}">Dag {{{{voornaam}}}},</p>'
-            f'<p style="{_P}">We hopen dat u na uw sessie goed tot rust bent gekomen '
-            'en u helemaal uzelf voelt.</p>'
-            f'<p style="{_P}">Als u een moment heeft, zou u ons enorm helpen door '
-            'uw ervaring te delen via Google. Zo vinden ook anderen hun weg naar '
-            'ontspanning en welzijn.</p>'
-            f'<p style="margin:24px 0;"><a href="{{{{google_link}}}}" style="{_BTN}">'
+        'body_html': (
+            '{{logo}}'
+            '<p>Dag {{voornaam}},</p>'
+            '<p>We hopen dat u nog wat nageniet van uw massage sessie.</p>'
+            '<p>Als u een momentje heeft, zouden we het erg waarderen '
+            'als u uw ervaring deelt via Google.</p>'
+            '<p><a href="{{google_link}}" '
+            'style="color:#1a73e8;text-decoration:underline;font-weight:bold;">'
             'Deel uw ervaring</a></p>'
-            f'<p style="font-size:13px;line-height:1.6;color:#888888;margin:0;">'
-            'Tot de volgende keer!<br><strong>Uw praktijk</strong></p>'
-        ),
-    },
-    {
-        'naam': 'Reactivatie',
-        'onderwerp': 'We missen u — en we horen graag hoe het met u gaat',
-        'is_actief': False,
-        'body_html': _tpl(
-            f'<p style="{_P}">Dag {{{{voornaam}}}},</p>'
-            f'<p style="{_P}">Het is al een tijdje geleden dat we u gezien hebben. '
-            'We hopen dat alles goed met u gaat!</p>'
-            f'<p style="{_P}">Als u ooit klaar bent voor een nieuwe sessie, staan we '
-            'graag voor u klaar. En als u intussen uw eerdere ervaring wilt delen '
-            'via Google, zou dat ons enorm helpen.</p>'
-            f'<p style="margin:24px 0;"><a href="{{{{google_link}}}}" style="{_BTN}">'
-            'Schrijf een review</a></p>'
-            f'<p style="font-size:13px;line-height:1.6;color:#888888;margin:0;">'
-            'Hartelijke groeten,<br><strong>Uw praktijk</strong></p>'
+            '<p>Tot de volgende keer,<br>{{praktijknaam}}</p>'
         ),
     },
 ]
