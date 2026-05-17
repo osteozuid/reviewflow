@@ -6,7 +6,6 @@ from datetime import datetime
 
 ENCODINGS_TO_TRY = ['utf-8-sig', 'utf-8', 'cp1252', 'latin-1']
 REQUIRED_COLUMNS = {'agenda', 'datum', 'naam', 'e-mail', 'afspraak type'}
-VALID_APPOINTMENT_TYPES = {'afspraak'}
 EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
 
 
@@ -83,7 +82,7 @@ def _process_csv_content(content, filename):
     stats = {
         'bestand': filename,
         'encoding': 'csv',
-        'rijen_gelezen': 0, 'rijen_leeg': 0, 'rijen_fout_type': 0,
+        'rijen_gelezen': 0, 'rijen_leeg': 0,
         'rijen_geen_naam': 0, 'rijen_geen_email': 0, 'rijen_ongeldig_email': 0,
         'rijen_ok': 0, 'overgeslagen': [],
     }
@@ -101,13 +100,6 @@ def _process_csv_content(content, filename):
 
         if not naam and not email and not afspraak_type:
             stats['rijen_leeg'] += 1
-            continue
-
-        if afspraak_type not in VALID_APPOINTMENT_TYPES:
-            stats['rijen_fout_type'] += 1
-            if naam or email:
-                stats['overgeslagen'].append({'naam': naam or '(leeg)', 'email': email or '(leeg)',
-                                              'reden': f'Type: "{afspraak_type_raw}"'})
             continue
 
         if not naam:
