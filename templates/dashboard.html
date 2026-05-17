@@ -15,6 +15,16 @@
 
 {% block content %}
 
+{% if g.user and g.user['role'] == 'superadmin' %}
+<div class="banner-info">
+  <svg class="ico"><use href="#i-info"/></svg>
+  <span>
+    Je bent ingelogd als <strong>superadmin</strong>. Dit dashboard toont geen tenantdata.
+    <a href="{{ url_for('admin_tenants') }}" class="btn btn-ghost btn-sm" style="margin-left:12px;">Tenantbeheer →</a>
+  </span>
+</div>
+{% endif %}
+
 <div class="page-head">
   <div>
     <h1 class="page-title">Goedemiddag{% if g.user %}, {{ g.user.full_name.split()[0] if g.user.full_name else 'Gebruiker' }}{% endif %}</h1>
