@@ -23,9 +23,12 @@ def get_smtp_config(tenant_id):
         'google_review_link': db.get_tenant_setting(tenant_id, 'google_review_link', ''),
         'logo_url':           db.get_tenant_setting(tenant_id, 'logo_url', ''),
     }
-    missing = [k for k in ('user', 'password', 'from_email') if not cfg[k]]
+    missing = [k for k in ('host', 'user', 'password', 'from_email') if not cfg[k]]
     if missing:
-        raise ValueError(f"Ontbrekende SMTP instellingen: {', '.join(missing).upper()}")
+        raise ValueError(
+            f"SMTP niet geconfigureerd. Ga naar Instellingen en vul in: "
+            f"{', '.join(missing).upper()}"
+        )
     return cfg
 
 
