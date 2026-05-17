@@ -723,17 +723,18 @@ DEFAULT_EMAIL_TEMPLATES = [
     {
         # Tekst aangeleverd door gebruiker
         'naam': 'Massage - Warm',
-        'onderwerp': 'Hoe heeft u zich gevoeld na uw sessie?',
+        'onderwerp': 'Hoe heeft u zich gevoeld na uw massagesessie?',
         'is_actief': False,
         'body_html': (
             '{{logo}}'
             '<p>Dag {{voornaam}},</p>'
-            '<p>We hopen dat u nog wat nageniet van uw massage sessie.</p>'
+            '<p>Bedankt voor uw bezoek aan {{praktijknaam}}.</p>'
+            '<p>We hopen dat u nog wat nageniet van uw massagesessie.</p>'
             '<p>Als u een momentje heeft, zouden we het erg waarderen '
             'als u uw ervaring deelt via Google.</p>'
             '<p><a href="{{google_link}}" '
             'style="color:#1a73e8;text-decoration:underline;font-weight:bold;">'
-            'Deel uw ervaring</a></p>'
+            'Deel uw ervaring via Google</a></p>'
             '<p>Tot de volgende keer,<br>{{praktijknaam}}</p>'
         ),
     },
