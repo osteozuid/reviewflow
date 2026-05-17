@@ -723,7 +723,7 @@ DEFAULT_EMAIL_TEMPLATES = [
     {
         # Tekst aangeleverd door gebruiker
         'naam': 'Massage - Warm',
-        'onderwerp': 'Hoe heeft u zich gevoeld na uw massagesessie?',
+        'onderwerp': 'Bedankt voor uw bezoek aan {{praktijknaam}}',
         'is_actief': False,
         'body_html': (
             '{{logo}}'
