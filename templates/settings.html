@@ -24,15 +24,17 @@
       </div>
       <div class="form-group">
         <label class="form-label">Gebruikersnaam (e-mailadres)</label>
-        <input type="text" name="smtp_user" value="{{ cfg.smtp_user }}" placeholder="info@osteozuid.be"
+        <input type="text" id="smtp_user_display" value="{{ cfg.smtp_user }}" placeholder="info@osteozuid.be"
                autocomplete="off" data-lpignore="true" data-form-type="other"
-               readonly onfocus="this.removeAttribute('readonly')" onclick="this.removeAttribute('readonly')">
+               oninput="document.getElementById('smtp_user_real').value=this.value">
+        <input type="hidden" id="smtp_user_real" name="smtp_user" value="{{ cfg.smtp_user }}">
       </div>
       <div class="form-group">
         <label class="form-label">Wachtwoord</label>
-        <input type="password" name="smtp_password" value="" placeholder="(leeg = ongewijzigd)"
+        <input type="password" id="smtp_pw_display" value="" placeholder="(leeg = ongewijzigd)"
                autocomplete="new-password" data-lpignore="true" data-form-type="other"
-               readonly onfocus="this.removeAttribute('readonly')" onclick="this.removeAttribute('readonly')">
+               oninput="document.getElementById('smtp_pw_real').value=this.value">
+        <input type="hidden" id="smtp_pw_real" name="smtp_password" value="">
         <div class="form-hint">Laat leeg om het huidige wachtwoord te bewaren.</div>
       </div>
       <div class="form-group">
