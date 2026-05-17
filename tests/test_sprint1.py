@@ -404,3 +404,78 @@ class TestDashboardSparklines:
         assert 'tenant_id' in src
         src2 = inspect.getsource(db_module.get_sent_count_for_period)
         assert 'tenant_id' in src2
+
+
+# ── 11. Default template catalogus ───────────────────────────────────────────
+
+@pytest.mark.requires_db
+class TestDefaultTemplates:
+    def test_nieuwe_tenant_krijgt_alle_default_templates(self, db_module):
+        """create_tenant seed alle DEFAULT_EMAIL_TEMPLATES voor de nieuwe tenant."""
+        from db import DEFAULT_EMAIL_TEMPLATES
+        tid = db_module.create_tenant(f'tpl-test-{_uid()}', 'Template Test')
+        templates = db_module.get_all_templates(tid)
+        namen = {t['naam'] for t in templates}
+        verwacht = {tpl['naam'] for tpl in DEFAULT_EMAIL_TEMPLATES}
+        assert verwacht == namen, f"Ontbrekend: {verwacht - namen}"
+
+    def test_standaard_template_is_actief(self, db_module):
+        """Na aanmaken tenant is 'Praktijk - Standaard' de actieve template."""
+        tid = db_module.create_tenant(f'tpl-actief-{_uid()}', 'Actief Test')
+        actief = db_module.get_active_template(tid)
+        assert actief is not None
+        assert actief['naam'] == 'Praktijk - Standaard'
+
+    def test_geen_duplicaten_bij_dubbele_seed(self, db_module):
+        """seed_preset_templates twee keer aanroepen maakt geen duplicaten."""
+        tid = db_module.create_tenant(f'tpl-dup-{_uid()}', 'Dup Test')
+        db_module.seed_preset_templates(tid)  # tweede keer
+        templates = db_module.get_all_templates(tid)
+        namen = [t['naam'] for t in templates]
+        assert len(namen) == len(set(namen)), f"Duplicaten gevonden: {namen}"
+
+    def test_backfill_voegt_ontbrekende_toe(self, db_module):
+        """seed_preset_templates vult ontbrekende templates aan zonder bestaande te raken."""
+        from auth import hash_password
+        from db import DEFAULT_EMAIL_TEMPLATES
+        # Maak tenant met handmatig één template
+        tid = db_module.create_tenant(f'tpl-bf-{_uid()}', 'Backfill Test')
+        # Verwijder alle templates (alsof oudere seed maar 2 had)
+        with db_module.get_connection() as conn:
+            db_module._q(conn,
+                "DELETE FROM email_templates WHERE tenant_id=%s AND naam != %s",
+                (tid, 'Praktijk - Standaard'))
+        resterend = db_module.get_all_templates(tid)
+        assert len(resterend) == 1
+
+        # Backfill
+        db_module.seed_preset_templates(tid)
+        na_backfill = db_module.get_all_templates(tid)
+        assert len(na_backfill) == len(DEFAULT_EMAIL_TEMPLATES)
+
+        # Bestaande template ongewijzigd
+        standaard = next(t for t in na_backfill if t['naam'] == 'Praktijk - Standaard')
+        assert standaard['is_actief'] is True  # was al actief, mag niet veranderen
+
+    def test_templates_tenant_geïsoleerd(self, db_module, tenant_a, tenant_b):
+        """Tenant A ziet geen templates van tenant B."""
+        tpls_a = db_module.get_all_templates(tenant_a['id'])
+        tpls_b = db_module.get_all_templates(tenant_b['id'])
+        ids_a = {t['id'] for t in tpls_a}
+        ids_b = {t['id'] for t in tpls_b}
+        assert ids_a.isdisjoint(ids_b), "Template-IDs overlappen tussen tenants!"
+
+    def test_owner_ziet_templates_pagina(self, app_client, owner_a):
+        """/templates pagina laadt voor een ingelogde owner."""
+        login_as(app_client, owner_a['email'], owner_a['_password'])
+        resp = app_client.get('/templates')
+        assert resp.status_code == 200
+        assert 'Praktijk - Standaard'.encode() in resp.data
+
+    def test_variabelen_zichtbaar_op_templates_pagina(self, app_client, owner_a):
+        """/templates toont de drie template-variabelen als zichtbare tekst."""
+        login_as(app_client, owner_a['email'], owner_a['_password'])
+        resp = app_client.get('/templates')
+        assert b'{{voornaam}}' in resp.data
+        assert b'{{google_link}}' in resp.data
+        assert b'{{logo}}' in resp.data

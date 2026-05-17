@@ -651,62 +651,138 @@ def set_active_template(tenant_id, template_id):
             (template_id, tenant_id))
 
 
+_CELL = "max-width:600px;margin:0 auto;padding:32px 24px;"
+_FONT = "font-family:Calibri,Candara,'Segoe UI',Arial,sans-serif;"
+_P    = "font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;"
+_BTN  = ("background:#f28c00;color:#ffffff;text-decoration:none;"
+         "padding:12px 28px;border-radius:4px;font-size:14px;"
+         "font-weight:600;display:inline-block;")
+
+def _tpl(body_rows):
+    return (
+        f'<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"></head>'
+        f'<body style="margin:0;padding:0;background:#ffffff;{_FONT}">'
+        f'<table width="100%" cellpadding="0" cellspacing="0" border="0">'
+        f'<tr><td style="{_CELL}">{{{{logo}}}}{body_rows}</td></tr>'
+        f'</table></body></html>'
+    )
+
+
+DEFAULT_EMAIL_TEMPLATES = [
+    {
+        'naam': 'Praktijk - Standaard',
+        'onderwerp': 'Uw ervaring bij onze praktijk',
+        'is_actief': True,
+        'body_html': _tpl(
+            f'<p style="{_P}">Dag {{{{voornaam}}}},</p>'
+            f'<p style="{_P}">Hartelijk bedankt voor uw bezoek aan onze praktijk. '
+            'We hopen dat we u goed hebben kunnen helpen.</p>'
+            f'<p style="{_P}">Als u een momentje heeft, zouden we het erg waarderen '
+            'als u uw ervaring deelt via Google. Uw review helpt andere mensen om '
+            'een geschikte praktijk te vinden.</p>'
+            f'<p style="margin:24px 0;"><a href="{{{{google_link}}}}" style="{_BTN}">'
+            'Schrijf uw Google review</a></p>'
+            f'<p style="{_P}">Heeft u opmerkingen of vragen? Antwoord dan gerust op '
+            'deze mail.</p>'
+            f'<p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0;">'
+            'Vriendelijke groeten,<br><strong>Uw praktijk</strong></p>'
+        ),
+    },
+    {
+        'naam': 'Professioneel',
+        'onderwerp': 'Bedankt voor uw bezoek — deel uw ervaring',
+        'is_actief': False,
+        'body_html': _tpl(
+            f'<p style="{_P}">Geachte {{{{voornaam}}}},</p>'
+            f'<p style="{_P}">Bedankt voor uw bezoek aan onze praktijk. '
+            'Wij hopen u op een professionele en zorgzame manier te hebben geholpen.</p>'
+            f'<p style="{_P}">Indien u tevreden bent, stellen wij het zeer op prijs '
+            'als u even de tijd neemt om een Google-recensie achter te laten. '
+            'Dit helpt ons en andere zorgzoekenden enorm.</p>'
+            f'<p style="margin:24px 0;"><a href="{{{{google_link}}}}" style="{_BTN}">'
+            'Schrijf een recensie</a></p>'
+            f'<p style="font-size:13px;line-height:1.6;color:#555555;margin:0;">'
+            'Met vriendelijke groeten,<br><strong>Uw praktijk</strong></p>'
+        ),
+    },
+    {
+        'naam': 'Kort & Krachtig',
+        'onderwerp': '1 minuut voor uw mening?',
+        'is_actief': False,
+        'body_html': _tpl(
+            f'<p style="{_P}">Dag {{{{voornaam}}}},</p>'
+            f'<p style="{_P}">Had u een goede ervaring? Deel het in 1 minuut via Google:</p>'
+            f'<p style="margin:0 0 24px 0;"><a href="{{{{google_link}}}}" style="{_BTN}">'
+            'Review schrijven</a></p>'
+            '<p style="font-size:13px;line-height:1.6;color:#888888;margin:0;">'
+            'Vragen? Antwoord gewoon op deze mail.</p>'
+        ),
+    },
+    {
+        'naam': 'Massage - Warm',
+        'onderwerp': 'Hoe heeft u zich gevoeld na uw sessie?',
+        'is_actief': False,
+        'body_html': _tpl(
+            f'<p style="{_P}">Dag {{{{voornaam}}}},</p>'
+            f'<p style="{_P}">We hopen dat u na uw sessie goed tot rust bent gekomen '
+            'en u helemaal uzelf voelt.</p>'
+            f'<p style="{_P}">Als u een moment heeft, zou u ons enorm helpen door '
+            'uw ervaring te delen via Google. Zo vinden ook anderen hun weg naar '
+            'ontspanning en welzijn.</p>'
+            f'<p style="margin:24px 0;"><a href="{{{{google_link}}}}" style="{_BTN}">'
+            'Deel uw ervaring</a></p>'
+            f'<p style="font-size:13px;line-height:1.6;color:#888888;margin:0;">'
+            'Tot de volgende keer!<br><strong>Uw praktijk</strong></p>'
+        ),
+    },
+    {
+        'naam': 'Reactivatie',
+        'onderwerp': 'We missen u — en we horen graag hoe het met u gaat',
+        'is_actief': False,
+        'body_html': _tpl(
+            f'<p style="{_P}">Dag {{{{voornaam}}}},</p>'
+            f'<p style="{_P}">Het is al een tijdje geleden dat we u gezien hebben. '
+            'We hopen dat alles goed met u gaat!</p>'
+            f'<p style="{_P}">Als u ooit klaar bent voor een nieuwe sessie, staan we '
+            'graag voor u klaar. En als u intussen uw eerdere ervaring wilt delen '
+            'via Google, zou dat ons enorm helpen.</p>'
+            f'<p style="margin:24px 0;"><a href="{{{{google_link}}}}" style="{_BTN}">'
+            'Schrijf een review</a></p>'
+            f'<p style="font-size:13px;line-height:1.6;color:#888888;margin:0;">'
+            'Hartelijke groeten,<br><strong>Uw praktijk</strong></p>'
+        ),
+    },
+]
+
+
 def seed_preset_templates(tenant_id):
+    """Add default templates to a tenant — only inserts missing ones (by name)."""
     with get_connection() as conn:
         cur = _q(conn,
-            "SELECT COUNT(*) as cnt FROM email_templates WHERE tenant_id = %s",
+            "SELECT naam FROM email_templates WHERE tenant_id = %s",
             (tenant_id,))
-        count = cur.fetchone()['cnt']
-    if count > 0:
-        return
+        existing_names = {row['naam'] for row in cur.fetchall()}
 
-    template_vriendelijk = '''<!DOCTYPE html>
-<html lang="nl">
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#ffffff;font-family:Calibri,Candara,'Segoe UI',Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
-  <tr><td style="max-width:600px;margin:0 auto;padding:32px 24px;">
-    {{logo}}
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Dag {{voornaam}},</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Hartelijk bedankt voor uw bezoek aan onze praktijk. We hopen dat we u goed hebben kunnen helpen.</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Als u een momentje heeft, zouden we het erg waarderen als u uw ervaring wilt delen via Google. Uw review helpt andere mensen om een geschikte praktijk te vinden.</p>
-    <p style="margin:24px 0;">
-      <a href="{{google_link}}" style="background:#f28c00;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:4px;font-size:14px;font-weight:600;display:inline-block;">Schrijf uw Google review</a>
-    </p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Heeft u opmerkingen of vragen? Antwoord dan gerust op deze mail.</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0;">Vriendelijke groeten,<br><strong>Uw praktijk</strong></p>
-  </td></tr>
-</table>
-</body>
-</html>'''
+        has_active = False
+        if existing_names:
+            cur2 = _q(conn,
+                "SELECT COUNT(*) as cnt FROM email_templates "
+                "WHERE tenant_id = %s AND is_actief = TRUE",
+                (tenant_id,))
+            has_active = cur2.fetchone()['cnt'] > 0
 
-    template_kort = '''<!DOCTYPE html>
-<html lang="nl">
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#ffffff;font-family:Calibri,Candara,'Segoe UI',Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
-  <tr><td style="max-width:600px;margin:0 auto;padding:32px 24px;">
-    {{logo}}
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 16px 0;">Dag {{voornaam}},</p>
-    <p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 20px 0;">Had u een goede ervaring? Deel het in 1 minuut via Google:</p>
-    <p style="margin:0 0 24px 0;">
-      <a href="{{google_link}}" style="background:#f28c00;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:4px;font-size:14px;font-weight:600;display:inline-block;">Review schrijven</a>
-    </p>
-    <p style="font-size:13px;line-height:1.6;color:#888888;margin:0;">Vragen? Antwoord gewoon op deze mail.</p>
-  </td></tr>
-</table>
-</body>
-</html>'''
-
-    with get_connection() as conn:
-        _q(conn,
-            """INSERT INTO email_templates (tenant_id, naam, onderwerp, body_html, is_actief)
-               VALUES (%s, %s, %s, %s, TRUE)""",
-            (tenant_id, 'Vriendelijk', 'Uw ervaring bij onze praktijk', template_vriendelijk))
-        _q(conn,
-            """INSERT INTO email_templates (tenant_id, naam, onderwerp, body_html)
-               VALUES (%s, %s, %s, %s)""",
-            (tenant_id, 'Kort & Krachtig', '1 minuut voor uw mening?', template_kort))
+        for tpl in DEFAULT_EMAIL_TEMPLATES:
+            if tpl['naam'] in existing_names:
+                continue
+            is_actief = tpl['is_actief'] and not has_active
+            if is_actief:
+                has_active = True
+            _q(conn,
+                """INSERT INTO email_templates
+                   (tenant_id, naam, onderwerp, body_html, is_actief)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (tenant_id, tpl['naam'], tpl['onderwerp'],
+                 tpl['body_html'], is_actief))
 
 
 # ─── Contacts ─────────────────────────────────────────────────────────────────
