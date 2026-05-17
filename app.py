@@ -29,7 +29,7 @@ app.jinja_env.globals['APP_NAME'] = config.APP_NAME
 
 APP_NAME     = config.APP_NAME
 APP_BASE_URL = config.APP_BASE_URL.rstrip('/')
-CSS_VERSION  = '4'  # bump on each static asset deploy
+CSS_VERSION  = '5'  # bump on each static asset deploy
 
 ALLOWED = {'.csv', '.xlsx', '.xls'}
 
@@ -416,10 +416,6 @@ def invite_accept(token):
 def dashboard():
     import db
     db.init_db()
-
-    # Superadmin has no tenant — send to tenant management
-    if g.user and g.user.get('role') == 'superadmin':
-        return redirect(url_for('admin_tenants'))
 
     db.sync_contacts_from_log(g.tenant_id)
 

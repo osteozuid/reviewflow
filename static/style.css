@@ -586,6 +586,18 @@ input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; c
 .alert-warning { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2); color: #78350f; }
 .alert-error   { background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.2); color: #7f1d1d; }
 
+.banner-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: var(--r);
+  background: rgba(14,165,233,.08);
+  border: 1px solid rgba(14,165,233,.25);
+  color: #0c4a6e;
+  font-size: 13px;
+}
+
 /* ── Misc ─────────────────────────────────────────────────────────── */
 .flex       { display: flex; }
 .gap-8      { gap: 8px; }
