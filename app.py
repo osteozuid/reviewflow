@@ -568,7 +568,11 @@ def upload_logo():
     if ext not in {'png', 'jpg', 'jpeg', 'svg', 'gif', 'webp'}:
         flash('Ongeldig bestandstype — gebruik PNG, JPG of SVG', 'warning')
         return redirect(url_for('settings'))
-    f.save(upload_dir / f'logo.{ext}')
+    try:
+        f.save(upload_dir / f'logo.{ext}')
+    except Exception as exc:
+        flash(f'Logo opslaan mislukt: {exc}', 'error')
+        return redirect(url_for('settings'))
     db.save_tenant_setting(
         g.tenant_id, 'logo_url',
         f'/static/uploads/{g.tenant_id}/logo.{ext}',

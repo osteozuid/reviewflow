@@ -203,10 +203,21 @@ def _q(conn, query, params=()):
     return cur
 
 
+def _patch_template_text(old, new, naam):
+    """One-time idempotent text replacement across all tenants for a named preset template."""
+    with get_connection() as conn:
+        _q(conn,
+            "UPDATE email_templates "
+            "SET body_html = REPLACE(body_html, %s, %s) "
+            "WHERE naam = %s AND body_html LIKE %s",
+            (old, new, naam, f'%{old}%'))
+
+
 def init_db():
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(SCHEMA)
+    _patch_template_text('massagesessie', 'massage sessie', 'Massage - Warm')
 
 
 # ─── Tenants ──────────────────────────────────────────────────────────────────
@@ -729,7 +740,7 @@ DEFAULT_EMAIL_TEMPLATES = [
             '{{logo}}'
             '<p>Dag {{voornaam}},</p>'
             '<p>Bedankt voor uw bezoek aan {{praktijknaam}}.</p>'
-            '<p>We hopen dat u nog wat nageniet van uw massagesessie.</p>'
+            '<p>We hopen dat u nog wat nageniet van uw massage sessie.</p>'
             '<p>Als u een momentje heeft, zouden we het erg waarderen '
             'als u uw ervaring deelt via Google.</p>'
             '<p><a href="{{google_link}}" '
