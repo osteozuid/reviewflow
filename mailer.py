@@ -53,6 +53,9 @@ def _render_template(body_html, voornaam, google_review_link,
     rendered = body_html.replace('{{voornaam}}', voornaam)
     rendered = rendered.replace('{{praktijknaam}}', praktijknaam)
     rendered = rendered.replace('{{google_link}}', google_review_link)
+    if logo_url and logo_url.startswith('/'):
+        base = os.getenv('APP_BASE_URL', os.getenv('BASE_URL', '')).rstrip('/')
+        logo_url = base + logo_url
     logo_html = (
         f'<img src="{logo_url}" alt="Logo" '
         f'style="max-height:80px;display:block;margin-bottom:16px;">'

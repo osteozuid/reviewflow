@@ -24,11 +24,15 @@
       </div>
       <div class="form-group">
         <label class="form-label">Gebruikersnaam (e-mailadres)</label>
-        <input type="text" name="smtp_user" value="{{ cfg.smtp_user }}" placeholder="info@osteozuid.be" autocomplete="off" data-lpignore="true" data-form-type="other">
+        <input type="text" name="smtp_user" value="{{ cfg.smtp_user }}" placeholder="info@osteozuid.be"
+               autocomplete="off" data-lpignore="true" data-form-type="other"
+               readonly onfocus="this.removeAttribute('readonly')" onclick="this.removeAttribute('readonly')">
       </div>
       <div class="form-group">
         <label class="form-label">Wachtwoord</label>
-        <input type="password" name="smtp_password" value="" placeholder="(leeg = ongewijzigd)" autocomplete="new-password" data-lpignore="true" data-form-type="other">
+        <input type="password" name="smtp_password" value="" placeholder="(leeg = ongewijzigd)"
+               autocomplete="new-password" data-lpignore="true" data-form-type="other"
+               readonly onfocus="this.removeAttribute('readonly')" onclick="this.removeAttribute('readonly')">
         <div class="form-hint">Laat leeg om het huidige wachtwoord te bewaren.</div>
       </div>
       <div class="form-group">
