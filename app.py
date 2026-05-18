@@ -155,7 +155,7 @@ def do_run(tenant_id, modus, test_email=None):
                         db.log_sent(tenant_id, [patient], bestand=patient['bestand'])
                     verzonden.append(patient)
                     _log(tenant_id, f'✓  {patient["naam"]}  <{patient["email"]}>')
-                    time.sleep(8)
+                    time.sleep(15)
                 except Exception as e:
                     gefaald.append(patient)
                     _log(tenant_id, f'✗  {patient["naam"]}  —  {e}')
