@@ -746,21 +746,21 @@ DEFAULT_EMAIL_TEMPLATES = [
         ),
     },
     {
-        # Tekst aangeleverd door gebruiker
         'naam': 'Massage - Warm',
-        'onderwerp': 'Bedankt voor uw bezoek aan {{praktijknaam}}',
+        'onderwerp': 'Uw ervaring bij {{praktijknaam}}',
         'is_actief': False,
-        'body_html': (
-            '{{logo}}'
-            '<p>Dag {{voornaam}},</p>'
-            '<p>Bedankt voor uw bezoek aan {{praktijknaam}}.</p>'
-            '<p>We hopen dat u nog wat nageniet van uw massage sessie.</p>'
-            '<p>Als u een momentje heeft, zouden we het erg waarderen '
+        'body_html': _tpl(
+            f'<p style="{_P}">Dag {{{{voornaam}}}},</p>'
+            f'<p style="{_P}">Bedankt voor uw bezoek aan {{{{praktijknaam}}}}.</p>'
+            f'<p style="{_P}">We hopen dat u tevreden was van uw massage sessie.</p>'
+            f'<p style="{_P}">Als u een momentje heeft, zouden we het erg waarderen '
             'als u uw ervaring deelt via Google.</p>'
-            '<p><a href="{{google_link}}" '
-            'style="color:#1a73e8;text-decoration:underline;font-weight:bold;">'
-            'Deel uw ervaring via Google</a></p>'
-            '<p>Tot de volgende keer,<br>{{praktijknaam}}</p>'
+            f'<p style="margin:0 0 24px 0;">'
+            f'<a href="{{{{google_link}}}}" style="{_BTN}">Deel uw ervaring via Google</a></p>'
+            f'<p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0 0 4px 0;">'
+            'Tot de volgende keer,</p>'
+            f'<p style="font-size:15px;line-height:1.7;color:#1a1a1a;margin:0;">'
+            '{{{{praktijknaam}}}}</p>'
         ),
     },
 ]
