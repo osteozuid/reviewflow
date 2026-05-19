@@ -145,6 +145,14 @@ def do_run(tenant_id, modus, test_email=None):
                 _log(tenant_id, f'TEST modus — alle mails → {test_email}')
             if active_template:
                 _log(tenant_id, f'Template: "{active_template["naam"]}"')
+
+            SEND_LIMIT = 20
+            if modus == 'send' and len(to_mail) > SEND_LIMIT:
+                _log(tenant_id,
+                     f'⚠  Limiet: max {SEND_LIMIT} mails per run — '
+                     f'{len(to_mail) - SEND_LIMIT} patiënten worden overgeslagen.')
+                to_mail = to_mail[:SEND_LIMIT]
+
             _log(tenant_id, '─' * 40)
 
             for patient in to_mail:
@@ -155,10 +163,17 @@ def do_run(tenant_id, modus, test_email=None):
                         db.log_sent(tenant_id, [patient], bestand=patient['bestand'])
                     verzonden.append(patient)
                     _log(tenant_id, f'✓  {patient["naam"]}  <{patient["email"]}>')
-                    time.sleep(15)
+                    time.sleep(20)
                 except Exception as e:
                     gefaald.append(patient)
-                    _log(tenant_id, f'✗  {patient["naam"]}  —  {e}')
+                    err_str = str(e)
+                    if '451' in err_str:
+                        friendly = 'Tijdelijke SMTP-limiet. Wacht 10 minuten en probeer opnieuw.'
+                    elif '535' in err_str or 'Authentication' in err_str:
+                        friendly = 'SMTP login fout. Controleer gebruikersnaam/wachtwoord in Instellingen.'
+                    else:
+                        friendly = err_str
+                    _log(tenant_id, f'✗  {patient["naam"]}  —  {friendly}')
 
             _log(tenant_id, '─' * 40)
             if modus == 'send' and verzonden:
@@ -592,12 +607,84 @@ def run_page():
                            send_geblokkeerd=send_geblokkeerd, page='run', app_name=APP_NAME)
 
 
+@app.route('/run/preview')
+def run_preview():
+    import db
+    from csv_import import load_all_csv
+    from dedup import deduplicate, matches_reviewed
+    from mailer import get_smtp_config
+
+    admin            = db.get_tenant_setting(g.tenant_id, 'admin_email', '')
+    send_geblokkeerd = db.get_tenant_setting(g.tenant_id, 'send_geblokkeerd', '0') == '1'
+    input_dir        = get_tenant_input_dir(g.tenant_id)
+    SEND_LIMIT       = 20
+    error            = None
+    preview          = None
+
+    try:
+        all_rows, load_stats = load_all_csv(input_dir)
+        candidates, _ = deduplicate(all_rows)
+        already_sent   = db.get_already_sent(g.tenant_id)
+        blocked_emails = db.get_blocked(g.tenant_id)
+        blocked_names  = db.get_blocked_names(g.tenant_id)
+        reviewed       = db.get_reviewed_names(g.tenant_id)
+
+        to_mail, skipped = [], []
+        for c in candidates:
+            if c['email'] in already_sent:
+                skipped.append({**c, 'reden': 'Al gemaild'})
+            elif c['email'] in blocked_emails:
+                skipped.append({**c, 'reden': 'Geblokkeerd'})
+            elif matches_reviewed(c['naam'], blocked_names):
+                skipped.append({**c, 'reden': 'Niet mailen'})
+            else:
+                m = matches_reviewed(c['naam'], reviewed)
+                if m:
+                    skipped.append({**c, 'reden': f'Al review ({m})'})
+                else:
+                    to_mail.append(c)
+
+        active_template = db.get_active_template(g.tenant_id)
+        try:
+            smtp_cfg = get_smtp_config(g.tenant_id)
+            smtp_ok  = True
+        except Exception:
+            smtp_cfg = {}
+            smtp_ok  = False
+
+        capped = len(to_mail) > SEND_LIMIT
+        preview = {
+            'total_gelezen':  sum(s['rijen_gelezen'] for s in load_stats),
+            'bestanden':      len(load_stats),
+            'to_mail':        to_mail,
+            'to_mail_sample': to_mail[:10],
+            'skipped':        skipped,
+            'capped':         capped,
+            'send_limit':     SEND_LIMIT,
+            'template':       active_template,
+            'smtp_ok':        smtp_ok,
+            'smtp_cfg':       smtp_cfg,
+        }
+    except FileNotFoundError:
+        error = 'Geen bestanden gevonden — upload eerst een CSV of Excel.'
+    except Exception as e:
+        error = str(e)
+
+    return render_template('run_confirm.html',
+        preview=preview, error=error, admin=admin,
+        send_geblokkeerd=send_geblokkeerd, page='run', app_name=APP_NAME)
+
+
 @app.route('/run/start', methods=['POST'])
 def run_start():
     import db
     modus       = request.form.get('modus', 'dry')
     admin_email = db.get_tenant_setting(g.tenant_id, 'admin_email', '')
     test_email  = request.form.get('test_email') or admin_email
+
+    if modus == 'send' and not request.form.get('confirmed'):
+        return redirect(url_for('run_preview'))
+
     run = _get_run(g.tenant_id)
     with _run_lock:
         if run['active']:

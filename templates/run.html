@@ -33,15 +33,14 @@
     </button>
   </form>
 
-  <form method="post" action="{{ url_for('run_start') }}" class="run-form"
-        onsubmit="return confirm('Echte mails versturen naar patiënten?\n\nDit kan niet ongedaan worden gemaakt.')">
-    <input type="hidden" name="modus" value="send">
-    <button type="submit" class="run-card" {% if send_geblokkeerd %}disabled style="opacity:.5;cursor:not-allowed;"{% endif %}>
+  <a href="{{ url_for('run_preview') }}" class="run-form" style="text-decoration:none;"
+     {% if send_geblokkeerd %}onclick="return false;" aria-disabled="true"{% endif %}>
+    <div class="run-card" {% if send_geblokkeerd %}style="opacity:.5;cursor:not-allowed;"{% endif %}>
       <div class="rc-icon"><svg class="ico"><use href="#i-send"/></svg></div>
       <div class="rc-title">Versturen</div>
-      <div class="rc-desc">Verstuurt echte mails naar patiënten.<br>Database wordt bijgewerkt.</div>
-    </button>
-  </form>
+      <div class="rc-desc">Bekijk kandidaten en bevestig<br>vóór echte verzending.</div>
+    </div>
+  </a>
 </div>
 
 <div class="section">

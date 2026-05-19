@@ -213,11 +213,25 @@ def _patch_template_text(old, new, naam):
             (old, new, naam, f'%{old}%'))
 
 
+def _patch_template_subject(old_subject, new_subject, naam):
+    """Idempotent subject fix for a named preset template across all tenants."""
+    with get_connection() as conn:
+        _q(conn,
+            "UPDATE email_templates SET onderwerp = %s "
+            "WHERE naam = %s AND onderwerp = %s",
+            (new_subject, naam, old_subject))
+
+
 def init_db():
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(SCHEMA)
     _patch_template_text('massagesessie', 'massage sessie', 'Massage - Warm')
+    _patch_template_subject(
+        'Hoe was uw massage?',
+        'Bedankt voor uw bezoek aan {{praktijknaam}}',
+        'Massage - Warm',
+    )
 
 
 # ─── Tenants ──────────────────────────────────────────────────────────────────
