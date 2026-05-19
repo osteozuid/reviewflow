@@ -752,7 +752,7 @@ DEFAULT_EMAIL_TEMPLATES = [
         'body_html': _tpl(
             f'<p style="{_P}">Dag {{{{voornaam}}}},</p>'
             f'<p style="{_P}">Bedankt voor uw bezoek aan {{{{praktijknaam}}}}.</p>'
-            f'<p style="{_P}">We hopen dat u tevreden was van uw massage sessie.</p>'
+            f'<p style="{_P}">We hopen dat u tevreden was over uw massage sessie.</p>'
             f'<p style="{_P}">Als u een momentje heeft, zouden we het erg waarderen '
             'als u uw ervaring deelt via Google.</p>'
             f'<p style="{_P}"><a href="{{{{google_link}}}}" '
