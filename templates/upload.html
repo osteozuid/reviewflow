@@ -43,8 +43,14 @@
       {% endfor %}
     </tbody>
   </table>
-  <div style="padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:10px; align-items:center;">
+  <div style="padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
     <a href="{{ url_for('run_page') }}" class="btn btn-primary"><svg class="ico"><use href="#i-play"/></svg> Uitvoeren</a>
+    <form method="post" action="{{ url_for('delete_all_files') }}" style="margin:0;"
+          onsubmit="return confirm('Alle {{ files|length }} bestanden verwijderen uit de wachtrij?')">
+      <button type="submit" class="btn btn-ghost btn-sm" style="color:#c0392b;">
+        <svg class="ico"><use href="#i-ban"/></svg> Verwijder alles
+      </button>
+    </form>
     <span class="text-dim" style="font-size:12px;">{{ files|length }} bestand(en) klaar voor verwerking</span>
   </div>
   {% else %}

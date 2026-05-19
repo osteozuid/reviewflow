@@ -560,6 +560,18 @@ def delete_file(filename):
     return redirect(url_for('upload'))
 
 
+@app.route('/upload/delete-all', methods=['POST'])
+def delete_all_files():
+    input_dir = get_tenant_input_dir(g.tenant_id)
+    removed = 0
+    for f in input_dir.iterdir():
+        if f.suffix.lower() in ALLOWED:
+            f.unlink()
+            removed += 1
+    flash(f'{removed} bestand(en) verwijderd uit de wachtrij', 'info')
+    return redirect(url_for('upload'))
+
+
 @app.route('/upload/logo', methods=['POST'])
 def upload_logo():
     import db
