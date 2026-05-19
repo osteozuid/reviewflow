@@ -173,12 +173,36 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS unsubscribe_tokens (
+    id         SERIAL PRIMARY KEY,
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
+    tenant_id  INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    email      VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS suppression_list (
+    id         SERIAL PRIMARY KEY,
+    tenant_id  INTEGER REFERENCES tenants(id) ON DELETE CASCADE NOT NULL,
+    email      VARCHAR(255) NOT NULL,
+    reason     VARCHAR(50) NOT NULL DEFAULT 'unsubscribe'
+               CHECK (reason IN ('unsubscribe', 'manual', 'bounce', 'complaint')),
+    source     VARCHAR(50) NOT NULL DEFAULT 'email_link'
+               CHECK (source IN ('email_link', 'admin_ui', 'system')),
+    token_hash VARCHAR(64),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE (tenant_id, email)
+);
+
 CREATE INDEX IF NOT EXISTS idx_review_log_tenant    ON review_log(tenant_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_review_log_tenant_email ON review_log(tenant_id, email);
 CREATE INDEX IF NOT EXISTS idx_blocked_tenant        ON blocked(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_audit_tenant          ON audit_logs(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_audit_user            ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_invite_token          ON invite_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_unsub_token_hash      ON unsubscribe_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_suppression_tenant    ON suppression_list(tenant_id);
 """
 
 
@@ -537,6 +561,73 @@ def delete_blocked_person(tenant_id, blocked_id):
         _q(conn,
             "DELETE FROM blocked WHERE id = %s AND tenant_id = %s",
             (blocked_id, tenant_id))
+
+
+# ─── Unsubscribe tokens ───────────────────────────────────────────────────────
+
+def create_unsubscribe_token(tenant_id, email):
+    import hashlib
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    email = email.lower().strip()
+    with get_connection() as conn:
+        _q(conn,
+            """INSERT INTO unsubscribe_tokens (token_hash, tenant_id, email)
+               VALUES (%s, %s, %s) ON CONFLICT (token_hash) DO NOTHING""",
+            (token_hash, tenant_id, email))
+    return token
+
+
+def validate_unsubscribe_token(token):
+    import hashlib
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with get_connection() as conn:
+        cur = _q(conn,
+            "SELECT tenant_id, email FROM unsubscribe_tokens WHERE token_hash = %s",
+            (token_hash,))
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+# ─── Suppression list ─────────────────────────────────────────────────────────
+
+def add_suppression(tenant_id, email, reason='unsubscribe',
+                    source='email_link', token_hash=None):
+    email = email.lower().strip()
+    with get_connection() as conn:
+        _q(conn,
+            """INSERT INTO suppression_list
+               (tenant_id, email, reason, source, token_hash)
+               VALUES (%s, %s, %s, %s, %s)
+               ON CONFLICT (tenant_id, email) DO NOTHING""",
+            (tenant_id, email, reason, source, token_hash))
+
+
+def get_suppressed(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            "SELECT email FROM suppression_list WHERE tenant_id = %s",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return {r['email'].lower() for r in rows}
+
+
+def get_suppression_list(tenant_id):
+    with get_connection() as conn:
+        cur = _q(conn,
+            """SELECT id, email, reason, source, created_at
+               FROM suppression_list
+               WHERE tenant_id = %s ORDER BY created_at DESC""",
+            (tenant_id,))
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_suppression(tenant_id, suppression_id):
+    with get_connection() as conn:
+        _q(conn,
+            "DELETE FROM suppression_list WHERE id = %s AND tenant_id = %s",
+            (suppression_id, tenant_id))
 
 
 # ─── Reviewed names ───────────────────────────────────────────────────────────

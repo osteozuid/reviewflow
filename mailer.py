@@ -48,8 +48,21 @@ def get_system_smtp_config():
     return cfg
 
 
+def _build_unsubscribe_footer(praktijknaam, unsubscribe_url):
+    return (
+        '<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+        'style="margin-top:32px;">'
+        '<tr><td style="border-top:1px solid #e0e0e0;padding-top:14px;'
+        'font-family:Arial,sans-serif;font-size:12px;color:#999999;line-height:1.6;">'
+        f'Wilt u geen reviewverzoeken meer ontvangen van {praktijknaam}? '
+        f'U kunt zich <a href="{unsubscribe_url}" '
+        'style="color:#999999;text-decoration:underline;">hier uitschrijven</a>.'
+        '</td></tr></table>'
+    )
+
+
 def _render_template(body_html, voornaam, google_review_link,
-                     logo_url='', praktijknaam=''):
+                     logo_url='', praktijknaam='', unsubscribe_url=''):
     rendered = body_html.replace('{{voornaam}}', voornaam)
     rendered = rendered.replace('{{praktijknaam}}', praktijknaam)
     rendered = rendered.replace('{{google_link}}', google_review_link)
@@ -62,6 +75,12 @@ def _render_template(body_html, voornaam, google_review_link,
         if logo_url else ''
     )
     rendered = rendered.replace('{{logo}}', logo_html)
+    link_html = (
+        f'<a href="{unsubscribe_url}" style="color:#999999;text-decoration:underline;">'
+        'hier uitschrijven</a>'
+        if unsubscribe_url else 'hier uitschrijven'
+    )
+    rendered = rendered.replace('{{unsubscribe_link}}', link_html)
     return rendered
 
 
@@ -101,23 +120,37 @@ def _send(to_email, voornaam, google_review_link, smtp_config,
         server.sendmail(smtp_config['from_email'], to_email, msg.as_bytes())
 
 
-def send_review_request(patient, smtp_config, template=None):
+def send_review_request(patient, smtp_config, template=None, unsubscribe_url=None):
     voornaam    = patient.get('voornaam') or patient['naam'].split()[-1]
     review_link = smtp_config['google_review_link']
     if not review_link:
         raise ValueError("Google Review link is niet ingesteld")
 
+    praktijknaam = smtp_config.get('from_name', '')
+    unsub_url    = unsubscribe_url or ''
+
     if template:
-        praktijknaam = smtp_config.get('from_name', '')
         subject   = render_subject(template['onderwerp'], praktijknaam)
         html_body = _render_template(
             template['body_html'], voornaam, review_link,
-            smtp_config.get('logo_url', ''), praktijknaam,
+            smtp_config.get('logo_url', ''), praktijknaam, unsub_url,
         )
-        _send(patient['email'], voornaam, review_link, smtp_config,
-              subject=subject, html_body=html_body)
     else:
-        _send(patient['email'], voornaam, review_link, smtp_config)
+        html_body = (
+            f'<p>Dag {voornaam},</p>'
+            f'<p><a href="{review_link}">Schrijf uw review</a></p>'
+        )
+        subject = None
+
+    # Always append unsubscribe footer to every real review mail
+    footer = _build_unsubscribe_footer(praktijknaam, unsub_url or '#')
+    if '</body>' in html_body:
+        html_body = html_body.replace('</body>', footer + '</body>', 1)
+    else:
+        html_body = html_body + footer
+
+    _send(patient['email'], voornaam, review_link, smtp_config,
+          subject=subject, html_body=html_body)
 
 
 def send_test_email(to_email, smtp_config):

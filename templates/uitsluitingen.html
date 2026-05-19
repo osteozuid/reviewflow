@@ -5,6 +5,61 @@
 <div class="ptitle">Uitsluitingen</div>
 <div class="ptitle-sub">Mensen die geen review-verzoek mogen ontvangen.</div>
 
+<!-- ── Sectie 0: Uitgeschreven (suppression list) ── -->
+<div class="section" style="margin-bottom:24px;">
+  <div class="sec-head">
+    <span><svg class="ico"><use href="#i-ban"/></svg> Uitgeschreven (via e-maillink)</span>
+    <span class="badge {{ 'b-orange' if suppressed|length > 0 else 'b-dim' }}">{{ suppressed|length }}</span>
+  </div>
+  <div style="padding:16px 20px;">
+    <p class="text-dim" style="font-size:13px; margin:0 0 14px;">
+      Personen die via de uitschrijflink in een e-mail hebben aangegeven geen reviewverzoeken meer te willen ontvangen.
+      GDPR: verwijder alleen met expliciete toestemming van de betrokkene.
+    </p>
+    <form method="post" style="display:flex; gap:8px;">
+      <input type="hidden" name="action" value="add_suppression">
+      <input type="email" name="email" placeholder="E-mailadres handmatig toevoegen"
+        style="flex:1; padding:7px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;" required>
+      <button type="submit" class="btn btn-ghost" style="white-space:nowrap; color:#c0392b;">+ Toevoegen</button>
+    </form>
+  </div>
+
+  {% if suppressed %}
+  <table>
+    <thead>
+      <tr>
+        <th>E-mail</th>
+        <th>Reden</th>
+        <th>Bron</th>
+        <th>Datum</th>
+        <th style="width:40px;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in suppressed %}
+      <tr>
+        <td class="mono" style="font-size:13px;">{{ s.email }}</td>
+        <td><span class="badge b-dim">{{ s.reason }}</span></td>
+        <td class="text-dim" style="font-size:12px;">{{ s.source }}</td>
+        <td class="text-dim" style="font-size:12px;">{{ s.created_at | fmtdt }}</td>
+        <td>
+          <form method="post"
+                onsubmit="return confirm('Uitschrijving verwijderen voor {{ s.email }}? De persoon kan daarna weer mails ontvangen.')">
+            <input type="hidden" name="action" value="delete_suppression">
+            <input type="hidden" name="id" value="{{ s.id }}">
+            <button type="submit" class="btn btn-ghost"
+                    style="padding:3px 8px; font-size:12px; color:#ef4444;">Heractiveren</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty" style="padding:20px;">Geen uitgeschreven e-mailadressen.</div>
+  {% endif %}
+</div>
+
 <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
 
   <!-- ── Sectie 1: Al gereviewd ── -->

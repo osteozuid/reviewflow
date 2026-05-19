@@ -73,7 +73,8 @@ def pg_conn():
         cur.execute("""
             TRUNCATE TABLE audit_logs, document_acceptances, contacts,
                           review_snapshots, email_templates, schedule_config,
-                          reviewed_names, blocked, import_log, review_log,
+                          reviewed_names, blocked, suppression_list, unsubscribe_tokens,
+                          import_log, review_log,
                           tenant_settings, invite_tokens, users, tenants
             RESTART IDENTITY CASCADE
         """)

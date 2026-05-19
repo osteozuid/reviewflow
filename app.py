@@ -106,15 +106,18 @@ def do_run(tenant_id, modus, test_email=None):
             return
 
         candidates, skip_stats = deduplicate(all_rows)
-        already_sent   = db.get_already_sent(tenant_id)
-        blocked_emails = db.get_blocked(tenant_id)
-        blocked_names  = db.get_blocked_names(tenant_id)
-        reviewed       = db.get_reviewed_names(tenant_id)
+        already_sent      = db.get_already_sent(tenant_id)
+        blocked_emails    = db.get_blocked(tenant_id)
+        blocked_names     = db.get_blocked_names(tenant_id)
+        reviewed          = db.get_reviewed_names(tenant_id)
+        suppressed_emails = db.get_suppressed(tenant_id)
 
         to_mail, skipped = [], []
         for c in candidates:
             if c['email'] in already_sent:
                 skipped.append({**c, 'reden': 'Al gemaild'})
+            elif c['email'] in suppressed_emails:
+                skipped.append({**c, 'reden': 'Uitgeschreven'})
             elif c['email'] in blocked_emails:
                 skipped.append({**c, 'reden': 'Geblokkeerd'})
             elif matches_reviewed(c['naam'], blocked_names):
@@ -133,6 +136,10 @@ def do_run(tenant_id, modus, test_email=None):
         verzonden, gefaald = [], []
 
         if modus == 'dry':
+            for p in skipped:
+                reden = p.get('reden', '')
+                if reden == 'Uitgeschreven':
+                    _log(tenant_id, f'[UNSUB]  {p["naam"]}  <{p["email"]}> — uitgeschreven')
             for p in to_mail:
                 _log(tenant_id, f'[DRY]  {p["naam"]}  <{p["email"]}>')
             _log(tenant_id, '─' * 40)
@@ -157,8 +164,14 @@ def do_run(tenant_id, modus, test_email=None):
 
             for patient in to_mail:
                 try:
+                    if modus == 'send':
+                        unsub_token = db.create_unsubscribe_token(tenant_id, patient['email'])
+                        unsub_url   = f'{APP_BASE_URL}/unsubscribe/{unsub_token}'
+                    else:
+                        unsub_url = ''
                     target = {**patient, 'email': test_email} if modus == 'test' else patient
-                    send_review_request(target, cfg, template=active_template)
+                    send_review_request(target, cfg, template=active_template,
+                                        unsubscribe_url=unsub_url)
                     if modus == 'send':
                         db.log_sent(tenant_id, [patient], bestand=patient['bestand'])
                     verzonden.append(patient)
@@ -243,7 +256,7 @@ def reload_schedule(tenant_id):
 @app.before_request
 def load_user():
     import db
-    open_endpoints = {'login', 'logout', 'invite_accept', 'static'}
+    open_endpoints = {'login', 'logout', 'invite_accept', 'unsubscribe', 'static'}
     g.user      = None
     g.tenant_id = None
     g.tenant    = None
@@ -636,15 +649,18 @@ def run_preview():
     try:
         all_rows, load_stats = load_all_csv(input_dir)
         candidates, _ = deduplicate(all_rows)
-        already_sent   = db.get_already_sent(g.tenant_id)
-        blocked_emails = db.get_blocked(g.tenant_id)
-        blocked_names  = db.get_blocked_names(g.tenant_id)
-        reviewed       = db.get_reviewed_names(g.tenant_id)
+        already_sent      = db.get_already_sent(g.tenant_id)
+        blocked_emails    = db.get_blocked(g.tenant_id)
+        blocked_names     = db.get_blocked_names(g.tenant_id)
+        reviewed          = db.get_reviewed_names(g.tenant_id)
+        suppressed_emails = db.get_suppressed(g.tenant_id)
 
         to_mail, skipped = [], []
         for c in candidates:
             if c['email'] in already_sent:
                 skipped.append({**c, 'reden': 'Al gemaild'})
+            elif c['email'] in suppressed_emails:
+                skipped.append({**c, 'reden': 'Uitgeschreven'})
             elif c['email'] in blocked_emails:
                 skipped.append({**c, 'reden': 'Geblokkeerd'})
             elif matches_reviewed(c['naam'], blocked_names):
@@ -756,10 +772,21 @@ def run_test_one():
         '</td></tr></table>'
     )
 
+    test_unsub_footer = (
+        '<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+        'style="margin-top:32px;">'
+        '<tr><td style="border-top:1px solid #e0e0e0;padding-top:14px;'
+        'font-family:Arial,sans-serif;font-size:12px;color:#999999;line-height:1.6;">'
+        f'[TEST] Uitschrijflink — in echte mail staat hier de unsubscribe-link voor '
+        f'{praktijknaam}.'
+        '</td></tr></table>'
+    )
+
     if active_template:
         subject   = f"[TEST] {render_subject(active_template['onderwerp'], praktijknaam)}"
         html_body = _render_template(
-            active_template['body_html'], voornaam, review_link, logo_url, praktijknaam
+            active_template['body_html'], voornaam, review_link, logo_url, praktijknaam,
+            unsubscribe_url='#test-unsubscribe',
         )
         if '<body' in html_body:
             html_body = _re.sub(r'(<body[^>]*>)', r'\1' + test_banner, html_body, count=1)
@@ -772,6 +799,12 @@ def run_test_one():
             f'<p style="font-family:Arial,sans-serif;font-size:15px;">'
             f'Dag {voornaam}, dit is een testmail. Geen actieve template ingesteld.</p>'
         )
+
+    # Always append test footer (no real unsubscribe token)
+    if '</body>' in html_body:
+        html_body = html_body.replace('</body>', test_unsub_footer + '</body>', 1)
+    else:
+        html_body = html_body + test_unsub_footer
 
     try:
         _send(admin_email, voornaam, review_link, cfg, subject=subject, html_body=html_body)
@@ -1060,12 +1093,23 @@ def uitsluitingen():
         elif action == 'delete_blocked':
             db.delete_blocked_person(g.tenant_id, request.form.get('id', ''))
             flash('Verwijderd', 'info')
+        elif action == 'add_suppression':
+            email = request.form.get('email', '').strip().lower()
+            if email:
+                db.add_suppression(g.tenant_id, email, reason='manual', source='admin_ui')
+                flash(f'{email} toegevoegd aan uitgeschreven lijst', 'success')
+            else:
+                flash('E-mailadres is verplicht', 'warning')
+        elif action == 'delete_suppression':
+            db.delete_suppression(g.tenant_id, request.form.get('id', ''))
+            flash('Uitschrijving verwijderd — persoon kan opnieuw mails ontvangen', 'info')
         return redirect(url_for('uitsluitingen'))
 
-    reviewed = db.get_reviewed_names_full(g.tenant_id)
-    blocked  = db.get_blocked_list(g.tenant_id)
+    reviewed    = db.get_reviewed_names_full(g.tenant_id)
+    blocked     = db.get_blocked_list(g.tenant_id)
+    suppressed  = db.get_suppression_list(g.tenant_id)
     return render_template('uitsluitingen.html', reviewed=reviewed, blocked=blocked,
-                           page='uitsluitingen', app_name=APP_NAME)
+                           suppressed=suppressed, page='uitsluitingen', app_name=APP_NAME)
 
 
 @app.route('/contacts/export/csv')
@@ -1258,6 +1302,33 @@ def admin_tenant_invite(tenant_id):
                  details={'invite_email': invite_email, 'role': invite_role},
                  ip=request.remote_addr)
     return redirect(url_for('admin_tenants'))
+
+
+# ─── Unsubscribe (public, no login required) ─────────────────────────────────
+@app.route('/unsubscribe/<token>')
+def unsubscribe(token):
+    import db
+    import hashlib
+    result = db.validate_unsubscribe_token(token)
+    if not result:
+        return render_template('unsubscribe.html', status='invalid', app_name=APP_NAME)
+
+    tenant_id    = result['tenant_id']
+    email        = result['email']
+    tenant       = db.get_tenant(tenant_id)
+    praktijknaam = (db.get_tenant_setting(tenant_id, 'praktijknaam', '')
+                    or db.get_tenant_setting(tenant_id, 'from_name', '')
+                    or (tenant['name'] if tenant else ''))
+
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    db.add_suppression(tenant_id, email,
+                       reason='unsubscribe', source='email_link',
+                       token_hash=token_hash)
+
+    masked = (email[:2] + '***@' + email.split('@')[1]) if '@' in email else '***'
+    return render_template('unsubscribe.html',
+        status='success', praktijknaam=praktijknaam,
+        masked_email=masked, app_name=APP_NAME)
 
 
 # ─── Error handlers ───────────────────────────────────────────────────────────
