@@ -1,10 +1,14 @@
 import io
 import os
+import re as _re
 import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+_TZ = ZoneInfo('Europe/Brussels')
 
 from functools import wraps
 
@@ -37,7 +41,7 @@ _lock = threading.Lock()
 
 
 def _log(msg):
-    ts = datetime.now().strftime('%H:%M:%S')
+    ts = datetime.now(_TZ).strftime('%H:%M:%S')
     with _lock:
         _run['lines'].append(f'[{ts}]  {msg}')
 
@@ -107,10 +111,15 @@ def do_run(modus, test_email=None):
         else:
             cfg = get_smtp_config()
             active_template = get_active_template()
-            if modus == 'test':
-                _log(f'TEST modus — alle mails → {test_email}')
             if active_template:
                 _log(f'Template: "{active_template["naam"]}"')
+
+            SEND_LIMIT = 30
+            if modus == 'send' and len(to_mail) > SEND_LIMIT:
+                _log(f'⚠  Limiet: max {SEND_LIMIT} mails per run — '
+                     f'{len(to_mail) - SEND_LIMIT} patiënten worden overgeslagen.')
+                to_mail = to_mail[:SEND_LIMIT]
+
             _log('─' * 40)
 
             for patient in to_mail:
@@ -121,10 +130,17 @@ def do_run(modus, test_email=None):
                         log_sent([patient], bestand=patient['bestand'])
                     verzonden.append(patient)
                     _log(f'✓  {patient["naam"]}  <{patient["email"]}>')
-                    time.sleep(8)
+                    time.sleep(20)
                 except Exception as e:
                     gefaald.append(patient)
-                    _log(f'✗  {patient["naam"]}  —  {e}')
+                    err_str = str(e)
+                    if '451' in err_str:
+                        friendly = 'Tijdelijke SMTP-limiet. Wacht 10 minuten en probeer opnieuw.'
+                    elif '535' in err_str or 'Authentication' in err_str:
+                        friendly = 'SMTP login fout. Controleer gebruikersnaam/wachtwoord.'
+                    else:
+                        friendly = err_str
+                    _log(f'✗  {patient["naam"]}  —  {friendly}')
 
             _log('─' * 40)
             if modus == 'send' and verzonden:
@@ -364,12 +380,185 @@ def run_page():
                            send_geblokkeerd=send_geblokkeerd, page='run')
 
 
+@app.route('/run/test-one', methods=['POST'])
+def run_test_one():
+    from db import (get_already_sent, get_blocked, get_blocked_names,
+                    get_reviewed_names, get_app_setting, get_active_template)
+    from csv_import import load_all_csv
+    from dedup import deduplicate, matches_reviewed
+    from mailer import get_smtp_config, _render_template, _send
+
+    try:
+        all_rows, _ = load_all_csv(INPUT_DIR)
+    except FileNotFoundError:
+        flash('Geen bestanden gevonden — upload eerst een CSV of Excel.', 'warning')
+        return redirect(url_for('run_page'))
+    except Exception as e:
+        flash(f'Fout bij laden bestanden: {e}', 'error')
+        return redirect(url_for('run_page'))
+
+    candidates, _ = deduplicate(all_rows)
+    already_sent   = get_already_sent()
+    blocked_emails = get_blocked()
+    blocked_names  = get_blocked_names()
+    reviewed       = get_reviewed_names()
+
+    candidate = None
+    for c in candidates:
+        if c['email'] in already_sent:
+            continue
+        if c['email'] in blocked_emails:
+            continue
+        if matches_reviewed(c['naam'], blocked_names):
+            continue
+        if matches_reviewed(c['naam'], reviewed):
+            continue
+        candidate = c
+        break
+
+    if not candidate:
+        flash('Geen kandidaat gevonden om testmail mee te maken.', 'warning')
+        return redirect(url_for('run_page'))
+
+    try:
+        cfg = get_smtp_config()
+    except ValueError as e:
+        flash(f'SMTP niet geconfigureerd: {e}', 'error')
+        return redirect(url_for('run_page'))
+
+    admin_email = cfg.get('admin_email') or ''
+    if not admin_email:
+        flash('Geen admin e-mailadres ingesteld in Instellingen.', 'warning')
+        return redirect(url_for('run_page'))
+
+    active_template = get_active_template()
+    voornaam    = candidate.get('voornaam') or candidate['naam'].split()[-1]
+    review_link = cfg.get('google_review_link', '') or 'https://maps.google.com/'
+    logo_url    = cfg.get('logo_url', '')
+
+    test_banner = (
+        '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;">'
+        '<tr><td style="background:#fff3cd;border:2px solid #ffc107;padding:12px 16px;'
+        'border-radius:4px;font-family:Arial,sans-serif;font-size:13px;color:#856404;">'
+        '&#9888; <strong>TESTMAIL</strong> &mdash; deze mail werd niet naar de pati&euml;nt verstuurd. '
+        f'Voorbeelddata van: <strong>{candidate["naam"]}</strong>'
+        ' &lt;' + candidate['email'] + '&gt;'
+        '</td></tr></table>'
+    )
+
+    if active_template:
+        subject   = f"[TEST] {active_template['onderwerp']}"
+        html_body = _render_template(active_template['body_html'], voornaam, review_link, logo_url)
+        if '<body' in html_body:
+            html_body = _re.sub(r'(<body[^>]*>)', r'\1' + test_banner, html_body, count=1)
+        else:
+            html_body = test_banner + html_body
+    else:
+        subject   = '[TEST] Review request — Osteozuid'
+        html_body = (test_banner +
+                     f'<p style="font-family:Arial,sans-serif;font-size:15px;">'
+                     f'Dag {voornaam}, dit is een testmail. Geen actieve template ingesteld.</p>')
+
+    try:
+        _send(admin_email, voornaam, review_link, cfg, subject=subject, html_body=html_body)
+        flash(
+            f'Testmail verstuurd naar {admin_email} met voorbeelddata van '
+            f'{candidate["naam"]} <{candidate["email"]}>',
+            'success'
+        )
+    except Exception as e:
+        err_str = str(e)
+        if '451' in err_str:
+            msg = 'Tijdelijke SMTP-limiet. Wacht 10 minuten en probeer opnieuw.'
+        elif '535' in err_str or 'Authentication' in err_str:
+            msg = 'SMTP login fout. Controleer gebruikersnaam/wachtwoord.'
+        else:
+            msg = err_str
+        flash(f'Fout bij testmail: {msg}', 'error')
+
+    return redirect(url_for('run_page'))
+
+
+@app.route('/run/preview')
+def run_preview():
+    from db import (get_already_sent, get_blocked, get_blocked_names,
+                    get_reviewed_names, get_app_setting, get_active_template)
+    from csv_import import load_all_csv
+    from dedup import deduplicate, matches_reviewed
+    from mailer import get_smtp_config
+
+    admin            = get_app_setting('admin_email') or ''
+    send_geblokkeerd = get_app_setting('send_geblokkeerd', '0') == '1'
+    praktijknaam     = get_app_setting('from_name') or 'Osteozuid'
+    SEND_LIMIT       = 30
+    error            = None
+    preview          = None
+
+    try:
+        all_rows, load_stats = load_all_csv(INPUT_DIR)
+        candidates, _ = deduplicate(all_rows)
+        already_sent   = get_already_sent()
+        blocked_emails = get_blocked()
+        blocked_names  = get_blocked_names()
+        reviewed       = get_reviewed_names()
+
+        to_mail, skipped = [], []
+        for c in candidates:
+            if c['email'] in already_sent:
+                skipped.append({**c, 'reden': 'Al gemaild'})
+            elif c['email'] in blocked_emails:
+                skipped.append({**c, 'reden': 'Geblokkeerd'})
+            elif matches_reviewed(c['naam'], blocked_names):
+                skipped.append({**c, 'reden': 'Niet mailen'})
+            else:
+                m = matches_reviewed(c['naam'], reviewed)
+                if m:
+                    skipped.append({**c, 'reden': f'Al review ({m})'})
+                else:
+                    to_mail.append(c)
+
+        active_template = get_active_template()
+        try:
+            smtp_cfg = get_smtp_config()
+            smtp_ok  = True
+        except Exception:
+            smtp_cfg = {}
+            smtp_ok  = False
+
+        capped = len(to_mail) > SEND_LIMIT
+        preview = {
+            'total_gelezen':  sum(s['rijen_gelezen'] for s in load_stats),
+            'bestanden':      len(load_stats),
+            'to_mail':        to_mail,
+            'to_mail_sample': to_mail[:10],
+            'skipped':        skipped,
+            'capped':         capped,
+            'send_limit':     SEND_LIMIT,
+            'template':       active_template,
+            'smtp_ok':        smtp_ok,
+            'smtp_cfg':       smtp_cfg,
+        }
+    except FileNotFoundError:
+        error = 'Geen bestanden gevonden — upload eerst een CSV of Excel.'
+    except Exception as e:
+        error = str(e)
+
+    return render_template('run_confirm.html',
+        preview=preview, error=error, admin=admin,
+        send_geblokkeerd=send_geblokkeerd,
+        praktijknaam=praktijknaam, page='run')
+
+
 @app.route('/run/start', methods=['POST'])
 def run_start():
     from db import get_app_setting
     modus = request.form.get('modus', 'dry')
     admin_email = get_app_setting('admin_email') or os.getenv('ADMIN_EMAIL', '')
     test_email = request.form.get('test_email') or admin_email
+
+    if modus == 'send' and not request.form.get('confirmed'):
+        return redirect(url_for('run_preview'))
+
     with _lock:
         if _run['active']:
             flash('Er loopt al een run', 'warning')

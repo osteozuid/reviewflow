@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}Uitvoeren — Bevestiging{% endblock %}
+{% block content %}
+
+<div class="ptitle">Versturen — Bevestiging</div>
+<div class="ptitle-sub">Controleer de details en bevestig vóór echte verzending.</div>
+
+{% if send_geblokkeerd %}
+<div class="alert alert-warning mb-24">
+  <svg class="ico"><use href="#i-ban"/></svg>
+  <strong>Versturen is geblokkeerd (testmodus actief).</strong>
+  Ga naar <a href="{{ url_for('settings') }}" style="color:var(--warning);">Instellingen</a> om dit uit te schakelen.
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-error mb-24">
+  <svg class="ico"><use href="#i-ban"/></svg>
+  {{ error }}
+</div>
+<div style="margin-top:16px;">
+  <a href="{{ url_for('run_page') }}" class="btn btn-ghost">← Terug</a>
+</div>
+
+{% elif preview %}
+
+<div class="grid-2" style="margin-bottom:20px;">
+
+  <!-- Samenvatting -->
+  <div class="section" style="margin:0;">
+    <div class="sec-head"><svg class="ico"><use href="#i-users"/></svg> Samenvatting</div>
+    <div style="padding:20px;">
+      <table style="width:100%; border-collapse:collapse;">
+        <tr>
+          <td style="padding:6px 0; color:var(--text-dim);">Bestanden geladen</td>
+          <td style="padding:6px 0; text-align:right; font-weight:600;">{{ preview.bestanden }}</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0; color:var(--text-dim);">Rijen gelezen</td>
+          <td style="padding:6px 0; text-align:right; font-weight:600;">{{ preview.total_gelezen }}</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0; color:var(--text-dim);">Overgeslagen</td>
+          <td style="padding:6px 0; text-align:right; font-weight:600; color:var(--text-dim);">{{ preview.skipped|length }}</td>
+        </tr>
+        <tr style="border-top:1px solid var(--border);">
+          <td style="padding:10px 0 4px; font-weight:600;">Te versturen</td>
+          <td style="padding:10px 0 4px; text-align:right; font-size:1.3em; font-weight:700; color:var(--accent);">
+            {% if preview.capped %}
+              {{ preview.send_limit }} <span style="font-size:.7em; font-weight:400; color:var(--warning);">(max {{ preview.send_limit }})</span>
+            {% else %}
+              {{ preview.to_mail|length }}
+            {% endif %}
+          </td>
+        </tr>
+      </table>
+
+      {% if preview.capped %}
+      <div class="alert alert-warning" style="margin-top:12px; padding:10px 14px;">
+        <svg class="ico"><use href="#i-ban"/></svg>
+        <strong>Limiet:</strong> maximaal {{ preview.send_limit }} mails per run.
+        De overige {{ preview.to_mail|length - preview.send_limit }} patiënten worden niet gemaild in deze run.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Template & SMTP -->
+  <div class="section" style="margin:0;">
+    <div class="sec-head"><svg class="ico"><use href="#i-mail"/></svg> Template & Afzender</div>
+    <div style="padding:20px;">
+      {% if preview.template %}
+      <div class="form-group">
+        <label class="form-label">Actieve template</label>
+        <div style="font-weight:600;">{{ preview.template.naam }}</div>
+        <div style="color:var(--text-dim); font-size:13px; margin-top:2px;">{{ preview.template.onderwerp }}</div>
+      </div>
+      {% else %}
+      <div class="alert alert-warning" style="padding:10px 14px; margin-bottom:16px;">
+        <svg class="ico"><use href="#i-ban"/></svg>
+        Geen actieve template. Ga naar <a href="{{ url_for('templates_list') }}">Templates</a> om er één te activeren.
+      </div>
+      {% endif %}
+
+      {% if preview.smtp_ok %}
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Afzender</label>
+        <div style="font-weight:600;">{{ preview.smtp_cfg.get('from_name','') }}</div>
+        <div style="color:var(--text-dim); font-size:13px; margin-top:2px;">{{ preview.smtp_cfg.get('from_email','') }}</div>
+      </div>
+      {% else %}
+      <div class="alert alert-error" style="padding:10px 14px;">
+        <svg class="ico"><use href="#i-ban"/></svg>
+        SMTP niet geconfigureerd. Ga naar <a href="{{ url_for('settings') }}">Instellingen</a>.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Eerste 10 kandidaten -->
+{% if preview.to_mail_sample %}
+<div class="section" style="margin-bottom:20px;">
+  <div class="sec-head">
+    <span><svg class="ico"><use href="#i-users"/></svg> Eerste ontvangers</span>
+    <span class="badge b-dim">{{ preview.to_mail_sample|length }} van {{ [preview.to_mail|length, preview.send_limit]|min }}</span>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Naam</th><th>E-mail</th><th>Bestand</th></tr>
+    </thead>
+    <tbody>
+      {% for p in preview.to_mail_sample %}
+      <tr>
+        <td>{{ p.naam }}</td>
+        <td style="color:var(--text-dim);">{{ p.email }}</td>
+        <td style="color:var(--text-dim); font-size:12px;">{{ p.bestand }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if preview.to_mail|length > 10 %}
+  <div style="padding:10px 20px; color:var(--text-dim); font-size:13px;">
+    … en nog {{ [preview.to_mail|length, preview.send_limit]|min - 10 }} andere(n)
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Bevestigingsformulier -->
+<div class="section" style="margin-bottom:20px;">
+  <div class="sec-head"><svg class="ico"><use href="#i-send"/></svg> Bevestigen</div>
+  <div style="padding:20px;">
+
+    {% set can_send = preview.smtp_ok and preview.template and not send_geblokkeerd and preview.to_mail|length > 0 %}
+
+    {% if not can_send %}
+    <div class="alert alert-warning" style="margin-bottom:16px;">
+      <svg class="ico"><use href="#i-ban"/></svg>
+      Versturen is niet mogelijk:
+      {% if not preview.smtp_ok %} SMTP niet geconfigureerd. {% endif %}
+      {% if not preview.template %} Geen actieve template. {% endif %}
+      {% if send_geblokkeerd %} Versturen is geblokkeerd in Instellingen. {% endif %}
+      {% if preview.to_mail|length == 0 %} Geen kandidaten gevonden. {% endif %}
+    </div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('run_start') }}" id="confirm-form">
+      <input type="hidden" name="modus" value="send">
+      <input type="hidden" name="confirmed" value="1">
+
+      <label class="form-label" style="display:flex; align-items:flex-start; gap:12px; cursor:pointer; margin-bottom:20px;">
+        <label class="toggle" style="margin-top:2px; flex-shrink:0;">
+          <input type="checkbox" id="confirm-check" {% if not can_send %}disabled{% endif %}
+                 onchange="document.getElementById('confirm-btn').disabled = !this.checked;">
+          <span class="slider"></span>
+        </label>
+        <span>
+          Ik bevestig dat ik
+          <strong>{{ [preview.to_mail|length, preview.send_limit]|min }} echte mails</strong>
+          wil versturen naar patiënten van
+          <strong>{{ praktijknaam }}</strong>.
+          Dit kan niet ongedaan worden gemaakt.
+        </span>
+      </label>
+
+      <div style="display:flex; gap:12px; align-items:center;">
+        <button type="submit" class="btn btn-primary btn-lg" id="confirm-btn" disabled
+                {% if not can_send %}style="opacity:.4; cursor:not-allowed;"{% endif %}>
+          <svg class="ico"><use href="#i-send"/></svg>
+          Verstuur {{ [preview.to_mail|length, preview.send_limit]|min }} mails
+        </button>
+        <a href="{{ url_for('run_page') }}" class="btn btn-ghost btn-lg">Annuleren</a>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}
