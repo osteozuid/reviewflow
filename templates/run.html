@@ -23,13 +23,11 @@
     </button>
   </form>
 
-  <form method="post" action="{{ url_for('run_start') }}" class="run-form">
-    <input type="hidden" name="modus" value="test">
-    <input type="hidden" name="test_email" value="{{ admin }}">
+  <form method="post" action="{{ url_for('run_test_one') }}" class="run-form">
     <button type="submit" class="run-card">
       <div class="rc-icon"><svg class="ico"><use href="#i-mail"/></svg></div>
-      <div class="rc-title">Test versturen</div>
-      <div class="rc-desc">Stuurt alle mails naar:<br><span class="mono" style="color:var(--accent);">{{ admin }}</span></div>
+      <div class="rc-title">Test 1 mail</div>
+      <div class="rc-desc">Stuurt 1 realistische testmail naar:<br><span class="mono" style="color:var(--accent);">{{ admin or '(geen admin mail)' }}</span></div>
     </button>
   </form>
 

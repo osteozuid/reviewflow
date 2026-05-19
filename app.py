@@ -675,6 +675,112 @@ def run_preview():
         send_geblokkeerd=send_geblokkeerd, page='run', app_name=APP_NAME)
 
 
+@app.route('/run/test-one', methods=['POST'])
+def run_test_one():
+    import db
+    import re as _re
+    from csv_import import load_all_csv
+    from dedup import deduplicate, matches_reviewed
+    from mailer import get_smtp_config, _render_template, render_subject, _send
+
+    input_dir = get_tenant_input_dir(g.tenant_id)
+
+    try:
+        all_rows, _ = load_all_csv(input_dir)
+    except FileNotFoundError:
+        flash('Geen bestanden gevonden — upload eerst een CSV of Excel.', 'warning')
+        return redirect(url_for('run_page'))
+    except Exception as e:
+        flash(f'Fout bij laden bestanden: {e}', 'error')
+        return redirect(url_for('run_page'))
+
+    candidates, _ = deduplicate(all_rows)
+    already_sent   = db.get_already_sent(g.tenant_id)
+    blocked_emails = db.get_blocked(g.tenant_id)
+    blocked_names  = db.get_blocked_names(g.tenant_id)
+    reviewed       = db.get_reviewed_names(g.tenant_id)
+
+    candidate = None
+    for c in candidates:
+        if c['email'] in already_sent:
+            continue
+        if c['email'] in blocked_emails:
+            continue
+        if matches_reviewed(c['naam'], blocked_names):
+            continue
+        if matches_reviewed(c['naam'], reviewed):
+            continue
+        candidate = c
+        break
+
+    if not candidate:
+        flash('Geen kandidaat gevonden om testmail mee te maken.', 'warning')
+        return redirect(url_for('run_page'))
+
+    try:
+        cfg = get_smtp_config(g.tenant_id)
+    except ValueError as e:
+        flash(f'SMTP niet geconfigureerd: {e}', 'error')
+        return redirect(url_for('run_page'))
+
+    admin_email = cfg.get('admin_email') or ''
+    if not admin_email:
+        flash('Geen admin e-mailadres ingesteld in Instellingen.', 'warning')
+        return redirect(url_for('run_page'))
+
+    active_template = db.get_active_template(g.tenant_id)
+    voornaam     = candidate.get('voornaam') or candidate['naam'].split()[-1]
+    praktijknaam = cfg.get('from_name', '')
+    review_link  = cfg.get('google_review_link', '') or 'https://maps.google.com/'
+    logo_url     = cfg.get('logo_url', '')
+
+    test_banner = (
+        '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;">'
+        '<tr><td style="background:#fff3cd;border:2px solid #ffc107;padding:12px 16px;'
+        'border-radius:4px;font-family:Arial,sans-serif;font-size:13px;color:#856404;">'
+        '&#9888; <strong>TESTMAIL</strong> &mdash; deze mail werd niet naar de pati&euml;nt verstuurd. '
+        f'Voorbeelddata van: <strong>{candidate["naam"]}</strong>'
+        ' &lt;' + candidate["email"] + '&gt;'
+        '</td></tr></table>'
+    )
+
+    if active_template:
+        subject   = f"[TEST] {render_subject(active_template['onderwerp'], praktijknaam)}"
+        html_body = _render_template(
+            active_template['body_html'], voornaam, review_link, logo_url, praktijknaam
+        )
+        if '<body' in html_body:
+            html_body = _re.sub(r'(<body[^>]*>)', r'\1' + test_banner, html_body, count=1)
+        else:
+            html_body = test_banner + html_body
+    else:
+        subject   = f"[TEST] Review request — {praktijknaam}"
+        html_body = (
+            test_banner +
+            f'<p style="font-family:Arial,sans-serif;font-size:15px;">'
+            f'Dag {voornaam}, dit is een testmail. Geen actieve template ingesteld.</p>'
+        )
+
+    try:
+        _send(admin_email, voornaam, review_link, cfg, subject=subject, html_body=html_body)
+        flash(
+            f'Testmail verstuurd naar {admin_email} met voorbeelddata van '
+            f'{candidate["naam"]} <{candidate["email"]}>',
+            'success'
+        )
+    except Exception as e:
+        err_str = str(e)
+        if '451' in err_str:
+            msg = 'Tijdelijke SMTP-limiet. Wacht 10 minuten en probeer opnieuw.'
+        elif '535' in err_str or 'Authentication' in err_str:
+            msg = 'SMTP login fout. Controleer gebruikersnaam/wachtwoord in Instellingen.'
+        else:
+            msg = err_str
+        flash(f'Fout bij testmail: {msg}', 'error')
+
+    return redirect(url_for('run_page'))
+
+
 @app.route('/run/start', methods=['POST'])
 def run_start():
     import db
