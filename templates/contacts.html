@@ -41,8 +41,8 @@
           </div>
         </td>
         <td class="mono text-dim">{{ c.email }}</td>
-        <td class="text-dim">{{ c.eerste_mail[:10] if c.eerste_mail else '—' }}</td>
-        <td class="text-dim">{{ c.laatste_mail[:10] if c.laatste_mail else '—' }}</td>
+        <td class="text-dim">{{ c.eerste_mail | fmtdt if c.eerste_mail else '—' }}</td>
+        <td class="text-dim">{{ c.laatste_mail | fmtdt if c.laatste_mail else '—' }}</td>
         <td style="text-align:center;">
           <span class="badge {{ 'b-orange' if c.aantal_mails > 1 else 'b-dim' }}">{{ c.aantal_mails }}</span>
         </td>
