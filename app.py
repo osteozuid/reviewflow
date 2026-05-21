@@ -1301,7 +1301,99 @@ def admin_tenant_invite(tenant_id):
                  tenant_id=tenant_id,
                  details={'invite_email': invite_email, 'role': invite_role},
                  ip=request.remote_addr)
+    referer = request.referrer or ''
+    if f'/admin/tenants/{tenant_id}' in referer:
+        return redirect(url_for('admin_tenant_detail', tenant_id=tenant_id))
     return redirect(url_for('admin_tenants'))
+
+
+@app.route('/admin/tenants/<int:tenant_id>')
+def admin_tenant_detail(tenant_id):
+    import db
+    if not g.user or g.user['role'] != 'superadmin':
+        abort(403)
+    tenant = db.get_tenant(tenant_id)
+    if not tenant:
+        abort(404)
+    users = db.get_tenant_users(tenant_id)
+    pending_invites = db.get_pending_invites(tenant_id)
+    db.log_audit('superadmin_view_tenant_detail', user_id=g.user['id'],
+                 tenant_id=tenant_id, ip=request.remote_addr)
+    return render_template('admin_tenant_detail.html',
+                           tenant=tenant,
+                           users=users,
+                           pending_invites=pending_invites,
+                           app_name=APP_NAME,
+                           page='admin')
+
+
+@app.route('/admin/tenants/<int:tenant_id>/users/<int:user_id>', methods=['POST'])
+def admin_tenant_user_action(tenant_id, user_id):
+    import db
+    from auth import hash_password
+    if not g.user or g.user['role'] != 'superadmin':
+        abort(403)
+
+    tenant = db.get_tenant(tenant_id)
+    if not tenant:
+        abort(404)
+
+    action = request.form.get('action', '')
+
+    if action == 'deactivate':
+        if user_id == g.user['id']:
+            flash('Je kunt je eigen account niet deactiveren', 'error')
+        else:
+            db.deactivate_user(user_id)
+            db.log_audit('user_deactivated', user_id=g.user['id'],
+                         tenant_id=tenant_id, details={'target_user_id': user_id},
+                         ip=request.remote_addr)
+            flash('Gebruiker gedeactiveerd', 'success')
+
+    elif action == 'reactivate':
+        db.reactivate_user(user_id)
+        db.log_audit('user_reactivated', user_id=g.user['id'],
+                     tenant_id=tenant_id, details={'target_user_id': user_id},
+                     ip=request.remote_addr)
+        flash('Gebruiker opnieuw geactiveerd', 'success')
+
+    elif action == 'update_profile':
+        email     = request.form.get('email', '').strip()
+        full_name = request.form.get('full_name', '').strip()
+        role      = request.form.get('role', '').strip()
+        _TENANT_ROLES = ('owner', 'staff')
+        if role not in _TENANT_ROLES:
+            db.log_audit('invalid_role_attempt', user_id=g.user['id'],
+                         tenant_id=tenant_id,
+                         details={'target_user_id': user_id, 'attempted_role': role},
+                         ip=request.remote_addr)
+            flash('Ongeldige rol — alleen owner en staff zijn toegestaan', 'error')
+        else:
+            db.update_user_profile(user_id,
+                                   email=email or None,
+                                   full_name=full_name or None,
+                                   role=role)
+            db.log_audit('user_profile_updated', user_id=g.user['id'],
+                         tenant_id=tenant_id,
+                         details={'target_user_id': user_id, 'email': email, 'role': role},
+                         ip=request.remote_addr)
+            flash('Profiel bijgewerkt', 'success')
+
+    elif action == 'set_password':
+        new_pw = request.form.get('new_password', '').strip()
+        if len(new_pw) < 8:
+            flash('Wachtwoord moet minimaal 8 tekens zijn', 'error')
+        else:
+            db.update_user_password(user_id, hash_password(new_pw))
+            db.log_audit('user_password_reset', user_id=g.user['id'],
+                         tenant_id=tenant_id, details={'target_user_id': user_id},
+                         ip=request.remote_addr)
+            flash('Wachtwoord bijgewerkt', 'success')
+
+    else:
+        flash('Onbekende actie', 'error')
+
+    return redirect(url_for('admin_tenant_detail', tenant_id=tenant_id))
 
 
 # ─── Unsubscribe (public, no login required) ─────────────────────────────────

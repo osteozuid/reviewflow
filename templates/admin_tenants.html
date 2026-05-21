@@ -22,7 +22,7 @@
     <tbody>
       {% for t in tenants %}
       <tr>
-        <td><strong>{{ t.name }}</strong></td>
+        <td><a href="{{ url_for('admin_tenant_detail', tenant_id=t.id) }}" style="font-weight:700; color:inherit; text-decoration:none;">{{ t.name }}</a></td>
         <td><code>{{ t.slug }}</code></td>
         <td>{{ t.user_count }}</td>
         <td>

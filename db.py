@@ -343,11 +343,39 @@ def update_user_password(user_id, password_hash):
 def get_tenant_users(tenant_id):
     with get_connection() as conn:
         cur = _q(conn,
-            """SELECT id, email, full_name, role, created_at, last_login
-               FROM users WHERE tenant_id = %s AND is_active = TRUE ORDER BY created_at""",
+            """SELECT id, email, full_name, role, is_active, created_at, last_login
+               FROM users WHERE tenant_id = %s ORDER BY created_at""",
             (tenant_id,))
         rows = cur.fetchall()
     return [dict(r) for r in rows]
+
+
+def deactivate_user(user_id):
+    with get_connection() as conn:
+        _q(conn, "UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
+
+
+def reactivate_user(user_id):
+    with get_connection() as conn:
+        _q(conn, "UPDATE users SET is_active = TRUE WHERE id = %s", (user_id,))
+
+
+def update_user_profile(user_id, email=None, full_name=None, role=None):
+    fields, vals = [], []
+    if email is not None:
+        fields.append('email = %s')
+        vals.append(email.lower().strip())
+    if full_name is not None:
+        fields.append('full_name = %s')
+        vals.append(full_name.strip())
+    if role is not None:
+        fields.append('role = %s')
+        vals.append(role)
+    if not fields:
+        return
+    vals.append(user_id)
+    with get_connection() as conn:
+        _q(conn, f"UPDATE users SET {', '.join(fields)} WHERE id = %s", vals)
 
 
 # ─── Invite tokens ────────────────────────────────────────────────────────────

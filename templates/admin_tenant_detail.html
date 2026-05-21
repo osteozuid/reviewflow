@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+{% block breadcrumb %}Superadmin / <a href="{{ url_for('admin_tenants') }}">Tenants</a> / {{ tenant.name }}{% endblock %}
+{% block content %}
+
+<div class="flex gap-12 align-center mb-24">
+  <a href="{{ url_for('admin_tenants') }}" class="btn btn-ghost btn-sm"><svg class="ico"><use href="#i-chevright"/></svg> Terug</a>
+  <div class="ptitle" style="margin:0;">{{ tenant.name }}</div>
+  <span class="badge {{ 'b-green' if tenant.is_active else 'b-gray' }}">
+    {{ 'Actief' if tenant.is_active else 'Inactief' }}
+  </span>
+  <span class="badge b-red" style="margin-left:auto;">Superadmin</span>
+</div>
+
+<div class="section mb-24" style="max-width:480px;">
+  <div class="sec-head">Tenant info</div>
+  <div style="padding:16px 20px; display:grid; grid-template-columns:120px 1fr; gap:8px; font-size:14px;">
+    <span class="text-dim">Slug</span><code>{{ tenant.slug }}</code>
+    <span class="text-dim">Aangemaakt</span><span>{{ tenant.created_at | fmtdt }}</span>
+  </div>
+</div>
+
+<!-- ── Gebruikers ── -->
+<div class="section mb-24">
+  <div class="sec-head">
+    <span>Gebruikers</span>
+    <span class="badge b-dim">{{ users|length }}</span>
+  </div>
+
+  {% if users %}
+  <table>
+    <thead>
+      <tr>
+        <th>Naam</th>
+        <th>E-mail</th>
+        <th>Rol</th>
+        <th>Laatste login</th>
+        <th>Status</th>
+        <th>Acties</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr style="{{ 'opacity:.55;' if not u.is_active else '' }}">
+        <td class="fw-600">{{ u.full_name or '—' }}</td>
+        <td class="mono text-dim" style="font-size:13px;">{{ u.email }}</td>
+        <td><span class="badge b-dim">{{ u.role }}</span></td>
+        <td class="text-dim" style="font-size:12px;">{{ u.last_login | fmtdt if u.last_login else 'Nooit' }}</td>
+        <td>
+          {% if u.is_active %}
+            <span class="badge b-green" style="font-size:11px;">Actief</span>
+          {% else %}
+            <span class="badge b-gray" style="font-size:11px;">Inactief</span>
+          {% endif %}
+        </td>
+        <td>
+          <button class="btn btn-sm btn-ghost" style="font-size:12px;"
+                  onclick="toggleUserPanel({{ u.id }})">Beheer</button>
+        </td>
+      </tr>
+      <!-- Inline beheer-paneel -->
+      <tr id="user-panel-{{ u.id }}" style="display:none; background:var(--surface-2);">
+        <td colspan="6" style="padding:16px 20px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; align-items:start;">
+
+            <!-- Profiel bijwerken -->
+            <div>
+              <div style="font-size:12px; font-weight:700; color:var(--text-dim); margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;">Profiel bijwerken</div>
+              <form method="post" action="{{ url_for('admin_tenant_user_action', tenant_id=tenant.id, user_id=u.id) }}">
+                <input type="hidden" name="action" value="update_profile">
+                <div class="form-group" style="margin-bottom:8px;">
+                  <label style="font-size:12px; color:var(--text-dim);">E-mail</label>
+                  <input type="email" name="email" value="{{ u.email }}"
+                         style="padding:6px 10px; font-size:13px; border:1px solid var(--border); border-radius:6px; width:100%;">
+                </div>
+                <div class="form-group" style="margin-bottom:8px;">
+                  <label style="font-size:12px; color:var(--text-dim);">Naam</label>
+                  <input type="text" name="full_name" value="{{ u.full_name or '' }}"
+                         style="padding:6px 10px; font-size:13px; border:1px solid var(--border); border-radius:6px; width:100%;">
+                </div>
+                <div class="form-group" style="margin-bottom:8px;">
+                  <label style="font-size:12px; color:var(--text-dim);">Rol</label>
+                  <select name="role" style="padding:6px 10px; font-size:13px; border:1px solid var(--border); border-radius:6px; width:100%;">
+                    <option value="owner" {{ 'selected' if u.role == 'owner' }}>owner</option>
+                    <option value="staff" {{ 'selected' if u.role == 'staff' }}>staff</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Opslaan</button>
+              </form>
+            </div>
+
+            <!-- Wachtwoord resetten -->
+            <div>
+              <div style="font-size:12px; font-weight:700; color:var(--text-dim); margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;">Wachtwoord instellen</div>
+              <form method="post" action="{{ url_for('admin_tenant_user_action', tenant_id=tenant.id, user_id=u.id) }}"
+                    onsubmit="return confirm('Wachtwoord wijzigen voor {{ u.email }}?')">
+                <input type="hidden" name="action" value="set_password">
+                <div class="form-group" style="margin-bottom:8px;">
+                  <label style="font-size:12px; color:var(--text-dim);">Nieuw wachtwoord</label>
+                  <input type="password" name="new_password" minlength="8" required
+                         placeholder="Min. 8 tekens"
+                         style="padding:6px 10px; font-size:13px; border:1px solid var(--border); border-radius:6px; width:100%;">
+                </div>
+                <button type="submit" class="btn btn-sm btn-ghost" style="color:#e67e22;">Instellen</button>
+              </form>
+            </div>
+
+            <!-- Account status -->
+            <div>
+              <div style="font-size:12px; font-weight:700; color:var(--text-dim); margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;">Account status</div>
+              {% if u.is_active %}
+              <form method="post" action="{{ url_for('admin_tenant_user_action', tenant_id=tenant.id, user_id=u.id) }}"
+                    onsubmit="return confirm('Gebruiker {{ u.email }} deactiveren?')">
+                <input type="hidden" name="action" value="deactivate">
+                <button type="submit" class="btn btn-sm btn-ghost" style="color:#ef4444;">Deactiveren</button>
+              </form>
+              <p style="font-size:11px; color:var(--text-dim); margin-top:6px;">
+                Gebruiker kan niet meer inloggen. Data blijft behouden.
+              </p>
+              {% else %}
+              <form method="post" action="{{ url_for('admin_tenant_user_action', tenant_id=tenant.id, user_id=u.id) }}">
+                <input type="hidden" name="action" value="reactivate">
+                <button type="submit" class="btn btn-sm btn-primary">Heractiveren</button>
+              </form>
+              {% endif %}
+            </div>
+
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Geen gebruikers gevonden.</div>
+  {% endif %}
+</div>
+
+<!-- ── Uitnodiging versturen ── -->
+<div class="section mb-24" style="max-width:560px;">
+  <div class="sec-head">Nieuwe gebruiker uitnodigen</div>
+  <div style="padding:16px 20px;">
+    {% if pending_invites %}
+    <div style="margin-bottom:12px;">
+      <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">Openstaande uitnodigingen:</div>
+      {% for inv in pending_invites %}
+      <div style="font-size:12px; color:var(--text-dim); padding:4px 0; border-bottom:1px solid var(--border);">
+        ⏳ {{ inv.email }} <span class="badge b-dim">{{ inv.role }}</span>
+        — verloopt {{ inv.expires_at | fmtdt }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <form method="post" action="{{ url_for('admin_tenant_invite', tenant_id=tenant.id) }}"
+          style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+      <div class="form-group" style="margin:0; flex:1; min-width:200px;">
+        <label style="font-size:12px; color:var(--text-dim);">E-mail</label>
+        <input type="email" name="invite_email" required placeholder="naam@praktijk.be"
+               style="padding:7px 10px; font-size:13px; border:1px solid var(--border); border-radius:6px; width:100%;">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:12px; color:var(--text-dim);">Rol</label>
+        <select name="invite_role" style="padding:7px 10px; font-size:13px; border:1px solid var(--border); border-radius:6px;">
+          <option value="owner">owner</option>
+          <option value="staff">staff</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-bottom:1px;">Uitnodiging versturen</button>
+    </form>
+  </div>
+</div>
+
+<script>
+function toggleUserPanel(uid) {
+  const row = document.getElementById('user-panel-' + uid);
+  row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+}
+</script>
+{% endblock %}
