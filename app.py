@@ -810,29 +810,26 @@ def run_test_one():
     else:
         html_body = html_body + test_unsub_footer
 
-    try:
-        _send(admin_email, voornaam, review_link, cfg, subject=subject, html_body=html_body)
-        app.logger.info(f'[test-one] Testmail verstuurd naar {admin_email} '
-                        f'(tenant {g.tenant_id})')
-        flash(
-            f'Testmail verstuurd naar {admin_email} met voorbeelddata van '
-            f'{candidate["naam"]} <{candidate["email"]}>',
-            'success'
-        )
-    except Exception as e:
-        app.logger.error(f'[test-one] SMTP fout (tenant {g.tenant_id}): {e}',
-                         exc_info=True)
-        err_str = str(e)
-        if '451' in err_str:
-            msg = 'Tijdelijke SMTP-limiet. Wacht 10 minuten en probeer opnieuw.'
-        elif '535' in err_str or 'Authentication' in err_str:
-            msg = 'SMTP login fout. Controleer gebruikersnaam/wachtwoord in Instellingen.'
-        elif 'timed out' in err_str.lower() or 'timeout' in err_str.lower():
-            msg = 'SMTP-server reageert niet (timeout). Controleer host en poort in Instellingen.'
-        else:
-            msg = err_str
-        flash(f'Fout bij testmail: {msg}', 'error')
+    tenant_id = g.tenant_id
 
+    def _send_in_background():
+        try:
+            _send(admin_email, voornaam, review_link, cfg,
+                  subject=subject, html_body=html_body)
+            app.logger.info(f'[test-one] OK → {admin_email} (tenant {tenant_id})')
+        except Exception as exc:
+            app.logger.error(f'[test-one] SMTP fout (tenant {tenant_id}): {exc}',
+                             exc_info=True)
+
+    t = threading.Thread(target=_send_in_background, daemon=True)
+    t.start()
+
+    flash(
+        f'Testmail wordt verstuurd naar {admin_email} — '
+        f'check je inbox over enkele seconden. '
+        f'Bij fout zie je details in de server logs.',
+        'info'
+    )
     return redirect(url_for('run_page'))
 
 
