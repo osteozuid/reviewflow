@@ -113,7 +113,7 @@ def _send(to_email, voornaam, google_review_link, smtp_config,
     msg.attach(MIMEText(plain, 'plain', 'utf-8'))
     msg.attach(MIMEText(html, 'html', 'utf-8'))
 
-    with smtplib.SMTP(smtp_config['host'], smtp_config['port']) as server:
+    with smtplib.SMTP(smtp_config['host'], smtp_config['port'], timeout=10) as server:
         server.ehlo()
         server.starttls()
         server.login(smtp_config['user'], smtp_config['password'])
@@ -199,7 +199,7 @@ def send_invite_email(to_email, tenant_name, invite_url):
     msg.attach(MIMEText(plain, 'plain', 'utf-8'))
     msg.attach(MIMEText(html, 'html', 'utf-8'))
 
-    with smtplib.SMTP(smtp['host'], smtp['port']) as server:
+    with smtplib.SMTP(smtp['host'], smtp['port'], timeout=10) as server:
         server.ehlo()
         server.starttls()
         server.login(smtp['user'], smtp['password'])
