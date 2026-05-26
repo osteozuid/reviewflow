@@ -444,6 +444,14 @@ def get_all_contacts():
     return [dict(r) for r in rows]
 
 
+def delete_contact(email):
+    email = email.lower().strip()
+    with get_connection() as conn:
+        conn.execute('DELETE FROM contacts WHERE lower(email) = ?', (email,))
+        conn.execute('DELETE FROM review_log WHERE lower(email) = ?', (email,))
+        conn.commit()
+
+
 def upsert_contact(naam, email, sent_at):
     if not email:
         return

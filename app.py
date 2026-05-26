@@ -831,6 +831,16 @@ def contacts():
     return render_template('contacts.html', contacts=all_contacts, page='contacts')
 
 
+@app.route('/contacts/delete', methods=['POST'])
+def contact_delete():
+    from db import delete_contact
+    email = request.form.get('email', '').strip()
+    if email:
+        delete_contact(email)
+        flash(f'{email} verwijderd uit contacten en log.', 'info')
+    return redirect(url_for('contacts'))
+
+
 @app.route('/uitsluitingen', methods=['GET', 'POST'])
 def uitsluitingen():
     from db import (init_db, get_reviewed_names_full, add_reviewed_name, delete_reviewed_name,
