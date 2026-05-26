@@ -7,10 +7,14 @@ from datetime import datetime
 ENCODINGS_TO_TRY = ['utf-8-sig', 'utf-8', 'cp1252', 'latin-1']
 EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
 
-NAME_COL_KEYWORDS  = ['naam', 'name', 'voornaam', 'achternaam', 'patient',
-                      'klant', 'client', 'persoon', 'contact', 'omschrijving']
-EMAIL_COL_KEYWORDS = ['mail', 'email', 'e-mail', 'emailadres', 'e_mail']
-DATE_COL_KEYWORDS  = ['datum', 'date', 'geboortedatum', 'birthday', 'dob']
+NAME_COL_KEYWORDS      = ['naam', 'name', 'patient', 'klant', 'client',
+                           'persoon', 'contact', 'omschrijving']
+VOORNAAM_COL_KEYWORDS  = ['voornaam', 'first name', 'firstname', 'given name',
+                           'roepnaam', 'prénom', 'prenom']
+ACHTERNAAM_COL_KEYWORDS = ['achternaam', 'familienaam', 'last name', 'lastname',
+                            'surname', 'nom']
+EMAIL_COL_KEYWORDS     = ['mail', 'email', 'e-mail', 'emailadres', 'e_mail']
+DATE_COL_KEYWORDS      = ['datum', 'date', 'geboortedatum', 'birthday', 'dob']
 
 
 def try_parse_date(date_str):
@@ -65,15 +69,26 @@ def _detect_delimiter(content):
 
 
 def _xlsx_to_rows(filepath):
-    """Return list-of-lists (header + data rows) from xlsx."""
+    """Return (list-of-lists, sheet_name) from the sheet with the most email-bearing rows."""
     import openpyxl
     wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
-    ws = wb.active
-    rows = []
-    for row in ws.iter_rows(values_only=True):
-        rows.append([str(cell).strip() if cell is not None else '' for cell in row])
+
+    best_sheet, best_count, best_rows = None, -1, []
+    for name in wb.sheetnames:
+        ws = wb[name]
+        rows = []
+        for row in ws.iter_rows(values_only=True):
+            rows.append([str(cell).strip() if cell is not None else '' for cell in row])
+        # Count rows (excluding header) that contain at least one valid email
+        email_rows = sum(
+            1 for r in rows[1:]
+            if any(EMAIL_REGEX.match(str(c).strip().lower()) for c in r if c)
+        )
+        if email_rows > best_count:
+            best_count, best_sheet, best_rows = email_rows, name, rows
+
     wb.close()
-    return rows
+    return best_rows, best_sheet
 
 
 def _find_col(fieldnames, keywords):
@@ -115,22 +130,35 @@ def _extract_name_from_row(row_dict, name_col):
     return ''
 
 
-def _process_rows(fieldnames, data_rows, filename):
+def _process_rows(fieldnames, data_rows, filename, sheet_name=None):
     """
     Format-agnostic processor: scan every cell for emails, find names
     from known column names or heuristics.
+
+    Priority for naam/voornaam/achternaam:
+    1. Explicit VOORNAAM + ACHTERNAAM columns → combine as "Achternaam Voornaam"
+    2. Single full-name column → keep as-is, split with extract_voornaam/achternaam
+    3. Heuristic: first cell with 2+ words that isn't an email or number
     """
-    name_col  = _find_col(fieldnames, NAME_COL_KEYWORDS)
+    voornaam_col   = _find_col(fieldnames, VOORNAAM_COL_KEYWORDS)
+    # Exclude the voornaam column so 'nom' in 'prénom' can't steal the achternaam slot
+    _remaining     = [f for f in fieldnames if f != voornaam_col]
+    achternaam_col = _find_col(_remaining, ACHTERNAAM_COL_KEYWORDS)
+    # Only use generic name_col when split columns are absent
+    name_col  = _find_col(fieldnames, NAME_COL_KEYWORDS) if not (voornaam_col and achternaam_col) else None
     date_col  = _find_col(fieldnames, DATE_COL_KEYWORDS)
     datum_col = next((c for c in fieldnames
                       if 'datum' in c.lower() and 'geboorte' not in c.lower()), None)
 
     stats = {
-        'bestand': filename,
-        'encoding': 'csv',
-        'rijen_gelezen': 0, 'rijen_leeg': 0,
-        'rijen_geen_email': 0, 'rijen_ongeldig_email': 0,
-        'rijen_ok': 0, 'overgeslagen': [],
+        'bestand':    filename,
+        'sheet':      sheet_name or '',
+        'encoding':   'csv',
+        'rijen_gelezen':      0,
+        'rijen_leeg':         0,
+        'rijen_geen_email':   0,
+        'rijen_ok':           0,
+        'overgeslagen':       [],
     }
 
     rows = []
@@ -151,9 +179,22 @@ def _process_rows(fieldnames, data_rows, filename):
             stats['rijen_geen_email'] += 1
             continue
 
-        naam = _extract_name_from_row(row, name_col)
-        if not naam:
-            naam = email  # use email as display name if nothing else found
+        # ── Naam resolution ──────────────────────────────────────────────────
+        if voornaam_col and achternaam_col:
+            # Crossuite-style: separate columns
+            vn = row.get(voornaam_col, '').strip()
+            an = row.get(achternaam_col, '').strip()
+            voornaam  = vn
+            achternaam = an
+            naam = f'{an} {vn}'.strip() if an else vn
+        else:
+            # MyOrganizer-style: single name field or heuristic
+            naam = _extract_name_from_row(row, name_col)
+            if not naam:
+                naam = email
+            voornaam  = extract_voornaam(naam)
+            achternaam = extract_achternaam(naam)
+        # ─────────────────────────────────────────────────────────────────────
 
         geboortedatum = try_parse_date(row_lower.get(date_col.lower(), '') if date_col else '')
         datum_consult = try_parse_date(row_lower.get(datum_col.lower(), '') if datum_col else '')
@@ -161,8 +202,8 @@ def _process_rows(fieldnames, data_rows, filename):
         stats['rijen_ok'] += 1
         rows.append({
             'naam':          naam,
-            'voornaam':      extract_voornaam(naam),
-            'achternaam':    extract_achternaam(naam),
+            'voornaam':      voornaam,
+            'achternaam':    achternaam,
             'email':         email,
             'geboortedatum': geboortedatum,
             'datum_consult': datum_consult,
@@ -187,13 +228,12 @@ def _process_csv_content(content, filename):
 
 
 def _process_xlsx(filepath):
-    all_rows = _xlsx_to_rows(filepath)
+    all_rows, sheet_name = _xlsx_to_rows(filepath)
     if not all_rows:
         raise ValueError(f"Leeg bestand: {filepath.name}")
     header = all_rows[0]
-    # Build DictReader-style list
     data = [dict(zip(header, row)) for row in all_rows[1:]]
-    return _process_rows(header, data, filepath.name)
+    return _process_rows(header, data, filepath.name, sheet_name=sheet_name)
 
 
 def load_csv_file(filepath):
