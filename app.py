@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import sys
 import threading
@@ -22,6 +23,9 @@ import config
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s %(levelname)s %(name)s: %(message)s')
+app.logger.setLevel(logging.INFO)
 app.jinja_env.globals['enumerate'] = enumerate
 app.jinja_env.globals['PLATFORM_NAME'] = config.PLATFORM_NAME
 app.jinja_env.globals['TOOL_NAME'] = config.TOOL_NAME
@@ -808,17 +812,23 @@ def run_test_one():
 
     try:
         _send(admin_email, voornaam, review_link, cfg, subject=subject, html_body=html_body)
+        app.logger.info(f'[test-one] Testmail verstuurd naar {admin_email} '
+                        f'(tenant {g.tenant_id})')
         flash(
             f'Testmail verstuurd naar {admin_email} met voorbeelddata van '
             f'{candidate["naam"]} <{candidate["email"]}>',
             'success'
         )
     except Exception as e:
+        app.logger.error(f'[test-one] SMTP fout (tenant {g.tenant_id}): {e}',
+                         exc_info=True)
         err_str = str(e)
         if '451' in err_str:
             msg = 'Tijdelijke SMTP-limiet. Wacht 10 minuten en probeer opnieuw.'
         elif '535' in err_str or 'Authentication' in err_str:
             msg = 'SMTP login fout. Controleer gebruikersnaam/wachtwoord in Instellingen.'
+        elif 'timed out' in err_str.lower() or 'timeout' in err_str.lower():
+            msg = 'SMTP-server reageert niet (timeout). Controleer host en poort in Instellingen.'
         else:
             msg = err_str
         flash(f'Fout bij testmail: {msg}', 'error')

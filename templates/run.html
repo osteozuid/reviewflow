@@ -23,10 +23,10 @@
     </button>
   </form>
 
-  <form method="post" action="{{ url_for('run_test_one') }}" class="run-form">
-    <button type="submit" class="run-card">
-      <div class="rc-icon"><svg class="ico"><use href="#i-mail"/></svg></div>
-      <div class="rc-title">Test 1 mail</div>
+  <form method="post" action="{{ url_for('run_test_one') }}" class="run-form" id="form-test-one">
+    <button type="submit" class="run-card" id="btn-test-one">
+      <div class="rc-icon"><svg class="ico" id="btn-test-icon"><use href="#i-mail"/></svg></div>
+      <div class="rc-title" id="btn-test-title">Test 1 mail</div>
       <div class="rc-desc">Stuurt 1 realistische testmail naar:<br><span class="mono" style="color:var(--accent);">{{ admin or '(geen admin mail)' }}</span></div>
     </button>
   </form>
@@ -128,6 +128,14 @@ fetch('/api/run/status').then(r => r.json()).then(d => {
 
 document.querySelectorAll('.run-form').forEach(f => {
   f.addEventListener('submit', () => setTimeout(startPoll, 600));
+});
+
+document.getElementById('form-test-one').addEventListener('submit', function() {
+  const btn   = document.getElementById('btn-test-one');
+  const title = document.getElementById('btn-test-title');
+  btn.disabled = true;
+  btn.style.opacity = '0.6';
+  title.textContent = 'Versturen…';
 });
 </script>
 {% endblock %}
