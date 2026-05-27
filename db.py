@@ -927,6 +927,27 @@ def get_all_contacts(tenant_id):
     return [dict(r) for r in rows]
 
 
+def delete_contact(tenant_id, email):
+    """Remove from contacts only. review_log stays intact — person stays non-mailable."""
+    email = email.lower().strip()
+    with get_connection() as conn:
+        _q(conn,
+           "DELETE FROM contacts WHERE tenant_id = %s AND lower(email) = %s",
+           (tenant_id, email))
+
+
+def reset_contact_mailability(tenant_id, email):
+    """Remove from both review_log and contacts so person can receive mail again."""
+    email = email.lower().strip()
+    with get_connection() as conn:
+        _q(conn,
+           "DELETE FROM review_log WHERE tenant_id = %s AND lower(email) = %s",
+           (tenant_id, email))
+        _q(conn,
+           "DELETE FROM contacts WHERE tenant_id = %s AND lower(email) = %s",
+           (tenant_id, email))
+
+
 def upsert_contact(tenant_id, naam, email, sent_at):
     if not email:
         return

@@ -26,6 +26,7 @@
         <th>Eerste mail</th>
         <th>Laatste mail</th>
         <th style="text-align:center;">Aantal</th>
+        <th></th>
       </tr>
     </thead>
     <tbody id="contact-tbody">
@@ -45,6 +46,26 @@
         <td class="text-dim">{{ c.laatste_mail | fmtdt if c.laatste_mail else '—' }}</td>
         <td style="text-align:center;">
           <span class="badge {{ 'b-orange' if c.aantal_mails > 1 else 'b-dim' }}">{{ c.aantal_mails }}</span>
+        </td>
+        <td style="text-align:right; white-space:nowrap;">
+          <form method="post" action="{{ url_for('contact_delete') }}" style="display:inline;"
+                onsubmit="return confirm('{{ c.email }} verwijderen uit contacten?\n(verzendlog blijft intact)')">
+            <input type="hidden" name="email" value="{{ c.email }}">
+            <button type="submit" class="btn btn-ghost"
+                    style="padding:3px 8px; font-size:12px;"
+                    title="Verwijder uit contacten">
+              <svg class="ico" style="width:13px;height:13px;"><use href="#i-trash"/></svg>
+            </button>
+          </form>
+          <form method="post" action="{{ url_for('contact_reset') }}" style="display:inline;"
+                onsubmit="return confirm('{{ c.email }} opnieuw mailbaar maken?\n\nWAARSCHUWING: deze persoon kan hierdoor opnieuw een reviewmail krijgen bij de volgende run.')">
+            <input type="hidden" name="email" value="{{ c.email }}">
+            <button type="submit" class="btn btn-ghost"
+                    style="padding:3px 8px; font-size:12px; color:var(--warning);"
+                    title="Maak opnieuw mailbaar (verwijdert uit log)">
+              <svg class="ico" style="width:13px;height:13px;"><use href="#i-rotate"/></svg>
+            </button>
+          </form>
         </td>
       </tr>
       {% endfor %}

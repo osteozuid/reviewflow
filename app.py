@@ -1077,6 +1077,26 @@ def contacts():
                            page='contacts', app_name=APP_NAME)
 
 
+@app.route('/contacts/delete', methods=['POST'])
+def contact_delete():
+    import db
+    email = request.form.get('email', '').strip()
+    if email:
+        db.delete_contact(g.tenant_id, email)
+        flash(f'{email} verwijderd uit contacten.', 'info')
+    return redirect(url_for('contacts'))
+
+
+@app.route('/contacts/reset', methods=['POST'])
+def contact_reset():
+    import db
+    email = request.form.get('email', '').strip()
+    if email:
+        db.reset_contact_mailability(g.tenant_id, email)
+        flash(f'{email} is opnieuw mailbaar — verwijderd uit contacten en verzendlog.', 'warning')
+    return redirect(url_for('contacts'))
+
+
 @app.route('/uitsluitingen', methods=['GET', 'POST'])
 def uitsluitingen():
     import db
