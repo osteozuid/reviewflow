@@ -2,7 +2,8 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import formataddr
+from email.utils import formataddr, formatdate, make_msgid
+from urllib.parse import quote as _urlquote
 
 from dotenv import load_dotenv
 
@@ -91,6 +92,25 @@ def _send(to_email, voornaam, google_review_link, smtp_config, subject=None, htm
     msg['Subject'] = subject or "Uw ervaring bij Osteozuid"
     msg['From']    = formataddr((smtp_config['from_name'], smtp_config['from_email']))
     msg['To']      = to_email
+    # `Date:` is required by RFC 5322 and explicitly checked by SpamAssassin
+    # (MISSING_DATE = +1.4 spam points). smtplib does not add it by itself
+    # and one.com's relay does not always backfill — so set it locally.
+    msg['Date']    = formatdate(localtime=True)
+    # `Message-ID:` strengthens DKIM coverage and eliminates the
+    # MSGID_FROM_MTA_HEADER warning. Anchored on the sender domain so
+    # DKIM signs it correctly.
+    from_email = (smtp_config.get('from_email') or '').strip()
+    sender_domain = from_email.split('@')[-1] if '@' in from_email else 'reviewflow.local'
+    msg['Message-ID'] = make_msgid(domain=sender_domain)
+    # `List-Unsubscribe:` (RFC 2369) — mailto-only flavor since this app
+    # has no /unsubscribe route. Points back at the practice's own mailbox
+    # with a clear subject the admin can filter on. Gmail/Outlook bulk-
+    # sender policy accepts mailto-only as valid; no List-Unsubscribe-Post
+    # because that is HTTPS-one-click only.
+    if from_email:
+        subj = _urlquote('Uitschrijven van reviewmails')
+        msg['List-Unsubscribe'] = f'<mailto:{from_email}?subject={subj}>'
+
     plain = build_body_plain(voornaam, google_review_link)
     html  = html_body or build_body_html(voornaam, google_review_link)
     msg.attach(MIMEText(plain, 'plain', 'utf-8'))
