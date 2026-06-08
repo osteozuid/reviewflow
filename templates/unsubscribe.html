@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Uitschrijven — Osteozuid</title>
+  <style>
+    body { margin:0; padding:24px; background:#f6f6f4;
+           font-family:Calibri,Candara,'Segoe UI',Arial,sans-serif; color:#1a1a1a; }
+    .card { max-width:480px; margin:72px auto; background:#fff;
+            border:1px solid #e6e3de; border-radius:14px; padding:44px 38px;
+            box-shadow:0 10px 30px -18px rgba(0,0,0,.25); text-align:center; }
+    .ico  { font-size:46px; margin-bottom:14px; }
+    h1    { font-size:21px; font-weight:700; margin:0 0 12px; }
+    p     { font-size:15px; line-height:1.65; color:#444; margin:0 0 10px; }
+    .dim  { color:#999; font-size:13px; }
+    .ok   { color:#2e7d46; }
+    .err  { color:#b23b2e; }
+    .brand{ color:#f28c00; }
+  </style>
+</head>
+<body>
+<div class="card">
+  {% if status == 'success' %}
+    <div class="ico">✅</div>
+    <h1 class="ok">U bent uitgeschreven</h1>
+    <p>U ontvangt geen reviewmails meer van <strong class="brand">{{ praktijknaam }}</strong>.</p>
+    {% if masked_email %}<p class="dim">E-mailadres: {{ masked_email }}</p>{% endif %}
+  {% elif status == 'already' %}
+    <div class="ico">✅</div>
+    <h1 class="ok">U bent reeds uitgeschreven</h1>
+    <p>Dit e-mailadres was al uitgeschreven voor reviewmails van
+       <strong class="brand">{{ praktijknaam }}</strong>. U hoeft niets meer te doen.</p>
+    {% if masked_email %}<p class="dim">E-mailadres: {{ masked_email }}</p>{% endif %}
+  {% else %}
+    <div class="ico">❌</div>
+    <h1 class="err">Ongeldige link</h1>
+    <p>Deze uitschrijflink is ongeldig of niet meer geldig.</p>
+    <p class="dim">Neem gerust contact op met de praktijk als u zich wilt uitschrijven.</p>
+  {% endif %}
+</div>
+</body>
+</html>

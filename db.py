@@ -97,9 +97,19 @@ CREATE TABLE IF NOT EXISTS review_snapshots (
     total INTEGER
 );
 
+-- Opaque unsubscribe tokens: the URL carries a random value only; the SHA-256
+-- hash maps to the e-mail server-side, so no readable e-mail/name ever appears
+-- in the link and a forged/edited token resolves to nothing.
+CREATE TABLE IF NOT EXISTS unsubscribe_tokens (
+    token_hash  TEXT PRIMARY KEY,
+    email       TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_review_log_email ON review_log(email);
 CREATE INDEX IF NOT EXISTS idx_blocked_email ON blocked(email);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reviewed_names_naam ON reviewed_names(naam);
+CREATE INDEX IF NOT EXISTS idx_unsub_tokens_email ON unsubscribe_tokens(email);
 '''
 
 
@@ -193,6 +203,59 @@ def add_blocked_person(naam, email='', reden=''):
 def delete_blocked_person(blocked_id):
     with get_connection() as conn:
         conn.execute('DELETE FROM blocked WHERE id = ?', (blocked_id,))
+
+
+# ─── Unsubscribe (opaque token + suppression) ─────────────────────────────────
+
+def create_unsubscribe_token(email):
+    """Create a random, opaque unsubscribe token bound to this e-mail. Only the
+    SHA-256 hash is stored, so the URL never carries a readable e-mail/name and
+    the DB never holds a usable token. Returns the raw token for the link."""
+    import secrets, hashlib
+    email = (email or '').strip().lower()
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with get_connection() as conn:
+        conn.execute(
+            'INSERT OR IGNORE INTO unsubscribe_tokens (token_hash, email) VALUES (?, ?)',
+            (token_hash, email))
+    return token
+
+
+def validate_unsubscribe_token(token):
+    """Return the e-mail for a valid token, or None for a forged/edited one."""
+    import hashlib
+    token_hash = hashlib.sha256((token or '').encode()).hexdigest()
+    with get_connection() as conn:
+        row = conn.execute(
+            'SELECT email FROM unsubscribe_tokens WHERE token_hash = ?',
+            (token_hash,)).fetchone()
+    return row['email'] if row else None
+
+
+def is_unsubscribed(email):
+    """True when this e-mail is already suppressed (on the blocked list)."""
+    email = (email or '').strip().lower()
+    if not email:
+        return False
+    with get_connection() as conn:
+        row = conn.execute(
+            'SELECT 1 FROM blocked WHERE lower(email) = ? LIMIT 1', (email,)).fetchone()
+    return row is not None
+
+
+def add_unsubscribe(email, source='email_link'):
+    """Idempotently suppress an e-mail by adding it to the blocked list, which
+    EVERY send flow (dry/test/manual/scheduled/CSV) already honours via
+    get_blocked(). Never raises on a repeat click. Returns True if newly added."""
+    email = (email or '').strip().lower()
+    if not email or is_unsubscribed(email):
+        return False
+    with get_connection() as conn:
+        conn.execute(
+            'INSERT INTO blocked (naam, email, reden) VALUES (?, ?, ?)',
+            ('', email, f'Uitgeschreven via reviewmail ({source})'))
+    return True
 
 
 def log_sent(candidates, bestand, batch_id=None):

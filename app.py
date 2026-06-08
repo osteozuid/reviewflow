@@ -26,6 +26,9 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'reviewflow-change-in-prod')
 app.jinja_env.globals['enumerate'] = enumerate
 
+# Public base URL, used to build the unsubscribe link in real review mails.
+APP_BASE_URL = os.environ.get('APP_BASE_URL', 'https://reviews.osteozuid.be').rstrip('/')
+
 INPUT_DIR  = ROOT / 'input'
 OUTPUT_DIR = ROOT / 'output'
 UPLOAD_DIR = ROOT / 'static' / 'uploads'
@@ -124,10 +127,19 @@ def do_run(modus, test_email=None):
 
             for patient in to_mail:
                 try:
-                    target = {**patient, 'email': test_email} if modus == 'test' else patient
-                    send_review_request(target, cfg, template=active_template)
                     if modus == 'send':
+                        # Real send: personal unsubscribe link + suppression token.
+                        from db import create_unsubscribe_token
+                        token = create_unsubscribe_token(patient['email'])
+                        unsub_url = f'{APP_BASE_URL}/unsubscribe/{token}'
+                        send_review_request(patient, cfg, template=active_template,
+                                            unsubscribe_url=unsub_url)
                         log_sent([patient], bestand=patient['bestand'])
+                    else:
+                        # Test mode: send to the test address, inert placeholder
+                        # footer, NO token created and NO patient suppressed.
+                        target = {**patient, 'email': test_email}
+                        send_review_request(target, cfg, template=active_template)
                     verzonden.append(patient)
                     _log(f'✓  {patient["naam"]}  <{patient["email"]}>')
                     time.sleep(20)
@@ -205,7 +217,7 @@ def reload_schedule():
 # ─── Auth ────────────────────────────────────────────────────────────────────
 @app.before_request
 def require_login():
-    open_endpoints = {'login', 'logout', 'static'}
+    open_endpoints = {'login', 'logout', 'static', 'unsubscribe'}
     if request.endpoint not in open_endpoints and not session.get('logged_in'):
         return redirect(url_for('login', next=request.path))
 
@@ -236,6 +248,28 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+
+# ─── Unsubscribe (public, no login) ───────────────────────────────────────────
+@app.route('/unsubscribe/<token>', methods=['GET', 'POST'])
+def unsubscribe(token):
+    """Public unsubscribe endpoint. GET shows a confirmation page; POST is the
+    RFC 8058 one-click variant that Gmail/Outlook call directly. Both suppress
+    the e-mail idempotently — a repeat click is safe and shows 'reeds
+    uitgeschreven'. The opaque token resolves only to its own e-mail; a forged
+    or edited token resolves to nothing."""
+    from db import (validate_unsubscribe_token, is_unsubscribed, add_unsubscribe,
+                    get_app_setting)
+    email = validate_unsubscribe_token(token)
+    if not email:
+        return render_template('unsubscribe.html', status='invalid'), 200
+    praktijknaam = get_app_setting('from_name', '') or 'Osteozuid'
+    already = is_unsubscribed(email)
+    add_unsubscribe(email, source=('one_click' if request.method == 'POST' else 'email_link'))
+    masked = (email[:2] + '***@' + email.split('@')[1]) if '@' in email else '***'
+    return render_template('unsubscribe.html',
+        status=('already' if already else 'success'),
+        praktijknaam=praktijknaam, masked_email=masked), 200
 
 
 # ─── Template filter ──────────────────────────────────────────────────────────
@@ -458,6 +492,14 @@ def run_test_one():
         html_body = (test_banner +
                      f'<p style="font-family:Arial,sans-serif;font-size:15px;">'
                      f'Dag {voornaam}, dit is een testmail. Geen actieve template ingesteld.</p>')
+
+    # Inert unsubscribe placeholder — the test mail mirrors a real one but
+    # carries NO working patient token and suppresses no one.
+    from mailer import _TEST_UNSUB_FOOTER
+    if '</body>' in html_body:
+        html_body = html_body.replace('</body>', _TEST_UNSUB_FOOTER + '</body>', 1)
+    else:
+        html_body = html_body + _TEST_UNSUB_FOOTER
 
     try:
         _send(admin_email, voornaam, review_link, cfg, subject=subject, html_body=html_body)
