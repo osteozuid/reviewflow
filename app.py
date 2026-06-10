@@ -375,6 +375,21 @@ def delete_file(filename):
     return redirect(url_for('upload'))
 
 
+@app.route('/upload/delete-all', methods=['POST'])
+def delete_all_files():
+    """Remove ALL queued CSV/Excel files from the input folder. Only touches
+    files in input/ with an allowed extension; the review_log/dedup ("nooit
+    dubbel versturen") logic is unaffected — that lives in the database."""
+    removed = 0
+    if INPUT_DIR.exists():
+        for f in INPUT_DIR.iterdir():
+            if f.is_file() and f.suffix.lower() in ALLOWED:
+                f.unlink()
+                removed += 1
+    flash(f'{removed} bestand(en) verwijderd uit de wachtrij', 'info')
+    return redirect(url_for('upload'))
+
+
 @app.route('/upload/logo', methods=['POST'])
 def upload_logo():
     from db import save_app_settings, get_app_setting

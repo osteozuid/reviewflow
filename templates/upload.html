@@ -18,7 +18,15 @@
 <div class="section">
   <div class="sec-head">
     <span>Bestanden in wachtrij (input/)</span>
-    <span class="badge {{ 'b-orange' if files|length > 0 else 'b-dim' }}">{{ files|length }} bestand(en)</span>
+    <span style="display:flex; align-items:center; gap:12px;">
+      {% if files %}
+      <form method="post" action="{{ url_for('delete_all_files') }}" style="margin:0;"
+            onsubmit="return confirm('Alle {{ files|length }} bestand(en) uit de wachtrij verwijderen?');">
+        <button type="submit" class="btn btn-danger btn-sm">Alles verwijderen</button>
+      </form>
+      {% endif %}
+      <span class="badge {{ 'b-orange' if files|length > 0 else 'b-dim' }}">{{ files|length }} bestand(en)</span>
+    </span>
   </div>
   {% if files %}
   <table>
